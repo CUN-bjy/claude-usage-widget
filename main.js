@@ -24,6 +24,7 @@ function createMainWindow() {
     alwaysOnTop: true,
     resizable: false,
     skipTaskbar: false,
+    icon: path.join(__dirname, 'assets/icon.ico'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
