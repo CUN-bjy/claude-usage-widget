@@ -7,6 +7,12 @@ const store = new Store({
   encryptionKey: 'claude-widget-secure-key-2024'
 });
 
+// Chrome User-Agent to prevent Electron detection and desktop app redirects
+const CHROME_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+// Possible session cookie names (Claude may have changed these)
+const SESSION_COOKIE_NAMES = ['sessionKey', '__Secure-next-auth.session-token', 'session', '__cf_bm', 'lastActiveOrg'];
+
 let mainWindow = null;
 let loginWindow = null;
 let silentLoginWindow = null;
@@ -73,27 +79,109 @@ function createLoginWindow() {
     modal: true,
     webPreferences: {
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      // Spoof User-Agent to look like regular Chrome browser
+      userAgent: CHROME_USER_AGENT
     }
   });
 
-  loginWindow.loadURL('https://claude.ai');
+  // Set User-Agent at session level to prevent Electron detection
+  loginWindow.webContents.setUserAgent(CHROME_USER_AGENT);
+
+  // Block navigation to external protocols (claude://, etc.) that trigger desktop app
+  loginWindow.webContents.on('will-navigate', (event, url) => {
+    console.log('[Login] will-navigate:', url);
+
+    // Block about:blank redirects (infinite loop trigger)
+    if (url === 'about:blank') {
+      console.log('[Login] Blocking about:blank redirect');
+      event.preventDefault();
+      return;
+    }
+
+    // Block custom protocol handlers that open desktop app
+    if (url.startsWith('claude://') || url.startsWith('anthropic://')) {
+      console.log('[Login] Blocking desktop app protocol:', url);
+      event.preventDefault();
+      return;
+    }
+
+    // Only allow https claude.ai URLs
+    if (!url.startsWith('https://claude.ai') &&
+        !url.startsWith('https://accounts.google.com') &&
+        !url.startsWith('https://appleid.apple.com') &&
+        !url.startsWith('https://www.google.com') &&
+        !url.startsWith('https://accounts.anthropic.com')) {
+      console.log('[Login] Blocking external URL:', url);
+      event.preventDefault();
+      return;
+    }
+  });
+
+  // Block new windows/popups that might redirect to desktop app
+  loginWindow.webContents.setWindowOpenHandler(({ url }) => {
+    console.log('[Login] Attempted to open new window:', url);
+
+    // Block desktop app protocols
+    if (url.startsWith('claude://') || url.startsWith('anthropic://') || url === 'about:blank') {
+      console.log('[Login] Blocking new window for:', url);
+      return { action: 'deny' };
+    }
+
+    // Allow OAuth popups but open in same window
+    if (url.startsWith('https://accounts.google.com') ||
+        url.startsWith('https://appleid.apple.com') ||
+        url.startsWith('https://accounts.anthropic.com')) {
+      loginWindow.loadURL(url);
+      return { action: 'deny' };
+    }
+
+    return { action: 'deny' };
+  });
+
+  loginWindow.loadURL('https://claude.ai/login');
 
   let loginCheckInterval = null;
   let hasLoggedIn = false;
 
-  // Function to check login status
+  // Function to check login status - tries multiple possible cookie names
   async function checkLoginStatus() {
     if (hasLoggedIn || !loginWindow) return;
 
     try {
-      const cookies = await session.defaultSession.cookies.get({
-        url: 'https://claude.ai',
-        name: 'sessionKey'
-      });
+      // Try to find session cookie with different possible names
+      let sessionKey = null;
 
-      if (cookies.length > 0) {
-        const sessionKey = cookies[0].value;
+      for (const cookieName of SESSION_COOKIE_NAMES) {
+        const cookies = await session.defaultSession.cookies.get({
+          url: 'https://claude.ai',
+          name: cookieName
+        });
+
+        if (cookies.length > 0) {
+          // For sessionKey, use the value directly
+          if (cookieName === 'sessionKey') {
+            sessionKey = cookies[0].value;
+            console.log(`[Login] Found cookie '${cookieName}':`, sessionKey.substring(0, 20) + '...');
+            break;
+          }
+        }
+      }
+
+      // Also try getting all cookies if sessionKey wasn't found
+      if (!sessionKey) {
+        const allCookies = await session.defaultSession.cookies.get({ url: 'https://claude.ai' });
+        console.log('[Login] All cookies:', allCookies.map(c => c.name));
+
+        // Look for sessionKey in all cookies
+        const sessionCookie = allCookies.find(c => c.name === 'sessionKey');
+        if (sessionCookie) {
+          sessionKey = sessionCookie.value;
+          console.log('[Login] Found sessionKey in all cookies');
+        }
+      }
+
+      if (sessionKey) {
         console.log('Session key found, attempting to get org ID...');
 
         // Fetch org ID from API
@@ -102,7 +190,7 @@ function createLoginWindow() {
           const response = await axios.get('https://claude.ai/api/organizations', {
             headers: {
               'Cookie': `sessionKey=${sessionKey}`,
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+              'User-Agent': CHROME_USER_AGENT
             }
           });
 
@@ -139,6 +227,15 @@ function createLoginWindow() {
       console.error('Error in login check:', error);
     }
   }
+
+  // Handle did-fail-load to detect blocked redirects
+  loginWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.log('[Login] did-fail-load:', errorCode, errorDescription, validatedURL);
+    // If it failed due to blocked redirect, stay on current page
+    if (validatedURL === 'about:blank' || validatedURL.startsWith('claude://')) {
+      console.log('[Login] Ignoring failed load for blocked URL');
+    }
+  });
 
   // Check on page load
   loginWindow.webContents.on('did-finish-load', async () => {
@@ -193,28 +290,79 @@ async function attemptSilentLogin() {
       show: false, // Hidden window
       webPreferences: {
         nodeIntegration: false,
-        contextIsolation: true
+        contextIsolation: true,
+        userAgent: CHROME_USER_AGENT
       }
     });
 
-    silentLoginWindow.loadURL('https://claude.ai');
+    // Set User-Agent to prevent Electron detection
+    silentLoginWindow.webContents.setUserAgent(CHROME_USER_AGENT);
+
+    // Block navigation to external protocols (claude://, etc.) that trigger desktop app
+    silentLoginWindow.webContents.on('will-navigate', (event, url) => {
+      console.log('[SilentLogin] will-navigate:', url);
+
+      if (url === 'about:blank' || url.startsWith('claude://') || url.startsWith('anthropic://')) {
+        console.log('[SilentLogin] Blocking redirect:', url);
+        event.preventDefault();
+        return;
+      }
+
+      if (!url.startsWith('https://claude.ai') &&
+          !url.startsWith('https://accounts.google.com') &&
+          !url.startsWith('https://appleid.apple.com') &&
+          !url.startsWith('https://www.google.com') &&
+          !url.startsWith('https://accounts.anthropic.com')) {
+        console.log('[SilentLogin] Blocking external URL:', url);
+        event.preventDefault();
+        return;
+      }
+    });
+
+    // Block new windows
+    silentLoginWindow.webContents.setWindowOpenHandler(({ url }) => {
+      console.log('[SilentLogin] Blocking new window:', url);
+      return { action: 'deny' };
+    });
+
+    silentLoginWindow.loadURL('https://claude.ai/login');
 
     let loginCheckInterval = null;
     let hasLoggedIn = false;
     const SILENT_LOGIN_TIMEOUT = 15000; // 15 seconds timeout
 
-    // Function to check login status
+    // Function to check login status - tries multiple possible cookie names
     async function checkLoginStatus() {
       if (hasLoggedIn || !silentLoginWindow) return;
 
       try {
-        const cookies = await session.defaultSession.cookies.get({
-          url: 'https://claude.ai',
-          name: 'sessionKey'
-        });
+        // Try to find session cookie with different possible names
+        let sessionKey = null;
 
-        if (cookies.length > 0) {
-          const sessionKey = cookies[0].value;
+        for (const cookieName of SESSION_COOKIE_NAMES) {
+          const cookies = await session.defaultSession.cookies.get({
+            url: 'https://claude.ai',
+            name: cookieName
+          });
+
+          if (cookies.length > 0 && cookieName === 'sessionKey') {
+            sessionKey = cookies[0].value;
+            console.log(`[SilentLogin] Found cookie '${cookieName}'`);
+            break;
+          }
+        }
+
+        // Also try getting all cookies if sessionKey wasn't found
+        if (!sessionKey) {
+          const allCookies = await session.defaultSession.cookies.get({ url: 'https://claude.ai' });
+          const sessionCookie = allCookies.find(c => c.name === 'sessionKey');
+          if (sessionCookie) {
+            sessionKey = sessionCookie.value;
+            console.log('[SilentLogin] Found sessionKey in all cookies');
+          }
+        }
+
+        if (sessionKey) {
           console.log('[Main] Silent login: Session key found, attempting to get org ID...');
 
           // Fetch org ID from API
@@ -223,7 +371,7 @@ async function attemptSilentLogin() {
             const response = await axios.get('https://claude.ai/api/organizations', {
               headers: {
                 'Cookie': `sessionKey=${sessionKey}`,
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                'User-Agent': CHROME_USER_AGENT
               }
             });
 
@@ -400,11 +548,21 @@ ipcMain.handle('delete-credentials', async () => {
   store.delete('sessionKey');
   store.delete('organizationId');
 
-  // Clear the session cookie to ensure actual logout
+  // Clear all Claude.ai cookies to ensure actual logout
   try {
-    await session.defaultSession.cookies.remove('https://claude.ai', 'sessionKey');
-    // Also try checking for other auth cookies or clear storage if needed
-    // await session.defaultSession.clearStorageData({ storages: ['cookies'] });
+    // Get all cookies for claude.ai and remove them
+    const cookies = await session.defaultSession.cookies.get({ url: 'https://claude.ai' });
+    for (const cookie of cookies) {
+      await session.defaultSession.cookies.remove('https://claude.ai', cookie.name);
+      console.log('[Logout] Removed cookie:', cookie.name);
+    }
+
+    // Also clear local storage and session storage for claude.ai
+    await session.defaultSession.clearStorageData({
+      origin: 'https://claude.ai',
+      storages: ['cookies', 'localstorage', 'sessionstorage']
+    });
+    console.log('[Logout] Cleared all storage data for claude.ai');
   } catch (error) {
     console.error('Failed to clear cookies:', error);
   }
@@ -464,7 +622,7 @@ ipcMain.handle('fetch-usage-data', async () => {
       {
         headers: {
           'Cookie': `sessionKey=${sessionKey}`,
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          'User-Agent': CHROME_USER_AGENT
         }
       }
     );
