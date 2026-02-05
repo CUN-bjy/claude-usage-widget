@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, session, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, session, shell, protocol } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
 const axios = require('axios');
@@ -9,6 +9,35 @@ const store = new Store({
 
 // Chrome User-Agent to prevent Electron detection and desktop app redirects
 const CHROME_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+// Block claude:// protocol from opening desktop app
+app.on('ready', () => {
+  // Remove this app as default handler for claude:// protocol
+  app.removeAsDefaultProtocolClient('claude');
+  app.removeAsDefaultProtocolClient('anthropic');
+
+  // Register dummy protocol handlers to prevent external app launch
+  protocol.registerHttpProtocol('claude', (request, callback) => {
+    console.log('[Protocol] Blocked claude:// request:', request.url);
+  });
+  protocol.registerHttpProtocol('anthropic', (request, callback) => {
+    console.log('[Protocol] Blocked anthropic:// request:', request.url);
+  });
+
+  // Block external protocol requests globally
+  session.defaultSession.webRequest.onBeforeRequest({ urls: ['claude://*', 'anthropic://*'] }, (details, callback) => {
+    console.log('[WebRequest] Blocking protocol request:', details.url);
+    callback({ cancel: true });
+  });
+});
+
+// Prevent the app from opening external URLs with claude:// protocol
+app.on('open-url', (event, url) => {
+  if (url.startsWith('claude://') || url.startsWith('anthropic://')) {
+    console.log('[App] Blocking open-url:', url);
+    event.preventDefault();
+  }
+});
 
 // Possible session cookie names (Claude may have changed these)
 const SESSION_COOKIE_NAMES = ['sessionKey', '__Secure-next-auth.session-token', 'session', '__cf_bm', 'lastActiveOrg'];
@@ -88,25 +117,39 @@ function createLoginWindow() {
   // Set User-Agent at session level to prevent Electron detection
   loginWindow.webContents.setUserAgent(CHROME_USER_AGENT);
 
+  // Helper function to check if URL should be blocked
+  const shouldBlockUrl = (url) => {
+    if (!url) return false;
+    return url === 'about:blank' ||
+           url.startsWith('claude://') ||
+           url.startsWith('anthropic://') ||
+           url.startsWith('claude-desktop://');
+  };
+
+  // Block at the earliest possible point - did-start-navigation fires before will-navigate
+  loginWindow.webContents.on('did-start-navigation', (event, url, isInPlace, isMainFrame) => {
+    console.log('[Login] did-start-navigation:', url, 'isMainFrame:', isMainFrame);
+    if (shouldBlockUrl(url)) {
+      console.log('[Login] Blocking navigation at start:', url);
+      event.preventDefault();
+      // Navigate back to login page if blocked
+      if (loginWindow && !loginWindow.isDestroyed()) {
+        loginWindow.loadURL('https://claude.ai/login');
+      }
+    }
+  });
+
   // Block navigation to external protocols (claude://, etc.) that trigger desktop app
   loginWindow.webContents.on('will-navigate', (event, url) => {
     console.log('[Login] will-navigate:', url);
 
-    // Block about:blank redirects (infinite loop trigger)
-    if (url === 'about:blank') {
-      console.log('[Login] Blocking about:blank redirect');
-      event.preventDefault();
-      return;
-    }
-
-    // Block custom protocol handlers that open desktop app
-    if (url.startsWith('claude://') || url.startsWith('anthropic://')) {
+    if (shouldBlockUrl(url)) {
       console.log('[Login] Blocking desktop app protocol:', url);
       event.preventDefault();
       return;
     }
 
-    // Only allow https claude.ai URLs
+    // Only allow https claude.ai URLs and OAuth providers
     if (!url.startsWith('https://claude.ai') &&
         !url.startsWith('https://accounts.google.com') &&
         !url.startsWith('https://appleid.apple.com') &&
@@ -118,12 +161,21 @@ function createLoginWindow() {
     }
   });
 
+  // Block redirect events
+  loginWindow.webContents.on('will-redirect', (event, url) => {
+    console.log('[Login] will-redirect:', url);
+    if (shouldBlockUrl(url)) {
+      console.log('[Login] Blocking redirect:', url);
+      event.preventDefault();
+    }
+  });
+
   // Block new windows/popups that might redirect to desktop app
   loginWindow.webContents.setWindowOpenHandler(({ url }) => {
     console.log('[Login] Attempted to open new window:', url);
 
     // Block desktop app protocols
-    if (url.startsWith('claude://') || url.startsWith('anthropic://') || url === 'about:blank') {
+    if (shouldBlockUrl(url)) {
       console.log('[Login] Blocking new window for:', url);
       return { action: 'deny' };
     }
@@ -298,11 +350,29 @@ async function attemptSilentLogin() {
     // Set User-Agent to prevent Electron detection
     silentLoginWindow.webContents.setUserAgent(CHROME_USER_AGENT);
 
+    // Helper function to check if URL should be blocked
+    const shouldBlockUrl = (url) => {
+      if (!url) return false;
+      return url === 'about:blank' ||
+             url.startsWith('claude://') ||
+             url.startsWith('anthropic://') ||
+             url.startsWith('claude-desktop://');
+    };
+
+    // Block at the earliest possible point
+    silentLoginWindow.webContents.on('did-start-navigation', (event, url) => {
+      console.log('[SilentLogin] did-start-navigation:', url);
+      if (shouldBlockUrl(url)) {
+        console.log('[SilentLogin] Blocking navigation at start:', url);
+        event.preventDefault();
+      }
+    });
+
     // Block navigation to external protocols (claude://, etc.) that trigger desktop app
     silentLoginWindow.webContents.on('will-navigate', (event, url) => {
       console.log('[SilentLogin] will-navigate:', url);
 
-      if (url === 'about:blank' || url.startsWith('claude://') || url.startsWith('anthropic://')) {
+      if (shouldBlockUrl(url)) {
         console.log('[SilentLogin] Blocking redirect:', url);
         event.preventDefault();
         return;
@@ -316,6 +386,15 @@ async function attemptSilentLogin() {
         console.log('[SilentLogin] Blocking external URL:', url);
         event.preventDefault();
         return;
+      }
+    });
+
+    // Block redirect events
+    silentLoginWindow.webContents.on('will-redirect', (event, url) => {
+      console.log('[SilentLogin] will-redirect:', url);
+      if (shouldBlockUrl(url)) {
+        console.log('[SilentLogin] Blocking redirect:', url);
+        event.preventDefault();
       }
     });
 
