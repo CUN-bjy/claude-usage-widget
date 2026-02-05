@@ -125,57 +125,59 @@ body {
 .login-container {
     padding: 0 16px;
     flex: 1;
-    /* Fill remaining vertical space */
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
 .login-content {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    text-align: left;
     width: 100%;
-    justify-content: space-between;
 }
 
-.login-content svg {
+/* Step 1: Auto-detect */
+.login-step1 {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+}
+
+.step-icon svg {
     color: #8b5cf6;
-    margin-bottom: 0;
-    width: 32px;
-    height: 32px;
     flex-shrink: 0;
 }
 
-.login-text-group {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    margin-right: auto;
-    /* Push button to right if space permits */
-    padding-left: 12px;
+.step-text {
+    flex: 1;
 }
 
-.login-content h3 {
+.step-text h3 {
     color: #e0e0e0;
     font-size: 14px;
     margin-bottom: 2px;
 }
 
-.login-content p {
+.step-text p {
     color: #a0a0a0;
     font-size: 11px;
-    margin-bottom: 0;
+    margin: 0;
 }
 
-.login-btn {
+.step-error {
+    color: #ef4444;
+    font-size: 9px;
+    margin-top: 2px;
+    min-height: 0;
+    word-break: break-word;
+}
+
+.auto-detect-btn {
     background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
     color: white;
     border: none;
-    padding: 8px 16px;
+    padding: 8px 14px;
     border-radius: 6px;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -183,9 +185,157 @@ body {
     flex-shrink: 0;
 }
 
-.login-btn:hover {
+.auto-detect-btn:hover {
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+.auto-detect-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.open-browser-link {
+    color: #a78bfa;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.open-browser-link:hover {
+    color: #c4b5fd;
+    text-decoration: underline;
+}
+
+.next-step-btn {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #a0a0a0;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.next-step-btn:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+    color: #e0e0e0;
+}
+
+/* Step 2: Paste Session Key */
+.session-key-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+.session-key-header h3 {
+    color: #e0e0e0;
+    font-size: 13px;
+    margin-bottom: 3px;
+}
+
+.session-key-header p {
+    color: #707070;
+    font-size: 10px;
+    margin-bottom: 0;
+}
+
+.session-key-header code {
+    background: rgba(139, 92, 246, 0.2);
+    color: #a78bfa;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 10px;
+}
+
+.session-key-input-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.session-key-input-row input {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #e0e0e0;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-family: monospace;
+    transition: border-color 0.2s;
+}
+
+.session-key-input-row input:focus {
+    border-color: #8b5cf6;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.session-key-input-row input::placeholder {
+    color: #505050;
+}
+
+.connect-btn {
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+    color: white;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.connect-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+.connect-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.session-key-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.session-key-error {
+    color: #ef4444;
+    font-size: 9px;
+    min-height: 14px;
+    max-height: 40px;
+    overflow-y: auto;
+    margin: 0;
+    flex: 1;
+    word-break: break-all;
+    font-family: monospace;
+}
+
+.back-step-btn {
+    background: none;
+    border: none;
+    color: #707070;
+    font-size: 10px;
+    cursor: pointer;
+    padding: 2px 4px;
+    transition: color 0.2s;
+    flex-shrink: 0;
+}
+
+.back-step-btn:hover {
+    color: #a0a0a0;
 }
 
 /* No Usage State */
@@ -274,7 +424,45 @@ body {
 
 /* Main Content */
 .content {
-    padding: 20px;
+    padding: 16px 20px;
+}
+
+/* Expand Toggle */
+.expand-toggle {
+    display: flex;
+    justify-content: center;
+    padding: 2px 0 0;
+    cursor: pointer;
+}
+
+.expand-arrow {
+    color: #505050;
+    transition: all 0.2s ease;
+}
+
+.expand-toggle:hover .expand-arrow {
+    color: #a0a0a0;
+}
+
+.expand-arrow.expanded {
+    transform: rotate(180deg);
+}
+
+/* Expandable Section */
+.expand-section {
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    margin-top: 6px;
+    padding-top: 6px;
+}
+
+.expand-section .usage-section {
+    height: 28px;
+    margin-bottom: 0;
+}
+
+.expand-section .usage-label {
+    font-size: 10px;
+    color: #808080;
 }
 
 .usage-section {
@@ -452,6 +640,38 @@ body {
     line-height: 1.2;
     margin-bottom: 12px;
     white-space: nowrap;
+}
+
+.debug-btn {
+    background: rgba(255, 255, 255, 0.05);
+    color: #707070;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+}
+
+.debug-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #a0a0a0;
+}
+
+.debug-output {
+    background: rgba(0, 0, 0, 0.4);
+    color: #8b5cf6;
+    font-size: 9px;
+    font-family: monospace;
+    padding: 8px;
+    border-radius: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    text-align: left;
+    user-select: all;
 }
 
 .coffee-btn {

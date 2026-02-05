@@ -40,19 +40,45 @@
                 <p>Loading usage data...</p>
             </div>
 
-            <!-- Login Required State -->
+            <!-- Login -->
             <div class="login-container" id="loginContainer" style="display: none;">
                 <div class="login-content">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-                        <polyline points="10 17 15 12 10 7" />
-                        <line x1="15" y1="12" x2="3" y2="12" />
-                    </svg>
-                    <div class="login-text-group">
-                        <h3>Login Required</h3>
-                        <p>Log in to view usage stats</p>
+                    <div class="login-step1" id="loginStep1">
+                        <div class="step-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                                <polyline points="10 17 15 12 10 7" />
+                                <line x1="15" y1="12" x2="3" y2="12" />
+                            </svg>
+                        </div>
+                        <div class="step-text">
+                            <h3>Connect to Claude.ai</h3>
+                            <p>Log in to your Claude account</p>
+                            <p class="step-error" id="autoDetectError"></p>
+                        </div>
+                        <button class="auto-detect-btn" id="autoDetectBtn">Log in</button>
+                        <button class="next-step-btn" id="nextStepBtn">Manual →</button>
                     </div>
-                    <button class="login-btn" id="loginBtn">Log In</button>
+
+                    <div class="login-step2" id="loginStep2" style="display: none;">
+                        <div class="session-key-form">
+                            <div class="session-key-header">
+                                <h3>Paste your Session Key</h3>
+                                <p>
+                                    <a href="#" id="openBrowserLink" class="open-browser-link">Open claude.ai</a>
+                                    → <code>F12</code> → Application → Cookies → <code>sessionKey</code>
+                                </p>
+                            </div>
+                            <div class="session-key-input-row">
+                                <input type="password" id="sessionKeyInput" placeholder="sk-ant-sid01-..." spellcheck="false" autocomplete="off">
+                                <button class="connect-btn" id="connectBtn">Connect</button>
+                            </div>
+                            <div class="session-key-footer">
+                                <p class="session-key-error" id="sessionKeyError"></p>
+                                <button class="back-step-btn" id="backStepBtn">← Back</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -65,17 +91,6 @@
                     <div class="no-usage-text-group">
                         <h3>No Usage Yet</h3>
                         <p>Start chatting with Claude to see your usage stats</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Auto-Login Attempt State -->
-            <div class="auto-login-container" id="autoLoginContainer" style="display: none;">
-                <div class="auto-login-content">
-                    <div class="spinner"></div>
-                    <div class="auto-login-text-group">
-                        <h3>Trying to auto-login...</h3>
-                        <p>Please wait while we reconnect</p>
                     </div>
                 </div>
             </div>
@@ -116,8 +131,18 @@
                     </div>
                 </div>
 
-                <!-- Hidden Footer element (removed) -->
-                <span id="lastUpdate" style="display: none;"></span>
+                <!-- Expand Toggle -->
+                <div class="expand-toggle" id="expandToggle">
+                    <svg class="expand-arrow" id="expandArrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                </div>
+
+                <!-- Expandable Details -->
+                <div class="expand-section" id="expandSection" style="display: none;">
+                    <div id="extraRows"></div>
+                </div>
+
             </div>
 
             <!-- Settings Overlay -->

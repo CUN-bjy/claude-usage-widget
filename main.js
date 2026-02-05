@@ -1,23 +1,88 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, session, shell } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
-const axios = require('axios');
-
 const store = new Store({
   encryptionKey: 'claude-widget-secure-key-2024'
 });
 
+const CHROME_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
 let mainWindow = null;
-let loginWindow = null;
-let silentLoginWindow = null;
 let tray = null;
 
-// Window configuration
 const WIDGET_WIDTH = 480;
 const WIDGET_HEIGHT = 140;
 
+// Set session-level User-Agent to avoid Electron detection
+app.on('ready', () => {
+  session.defaultSession.setUserAgent(CHROME_USER_AGENT);
+});
+
+// Fetch a JSON API endpoint using a hidden BrowserWindow (bypasses Cloudflare)
+function fetchViaWindow(url) {
+  return new Promise((resolve, reject) => {
+    const win = new BrowserWindow({
+      width: 800,
+      height: 600,
+      show: false,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true
+      }
+    });
+
+    const timeout = setTimeout(() => {
+      win.close();
+      reject(new Error('Request timeout'));
+    }, 30000);
+
+    win.webContents.on('did-finish-load', async () => {
+      try {
+        // Extract the text content of the page (API returns JSON as text)
+        const bodyText = await win.webContents.executeJavaScript(
+          'document.body.innerText || document.body.textContent'
+        );
+        clearTimeout(timeout);
+        win.close();
+
+        try {
+          const data = JSON.parse(bodyText);
+          resolve(data);
+        } catch (parseErr) {
+          reject(new Error('Invalid JSON: ' + bodyText.substring(0, 200)));
+        }
+      } catch (err) {
+        clearTimeout(timeout);
+        win.close();
+        reject(err);
+      }
+    });
+
+    win.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+      clearTimeout(timeout);
+      win.close();
+      reject(new Error(`Load failed: ${errorCode} ${errorDescription}`));
+    });
+
+    win.loadURL(url);
+  });
+}
+
+// Set sessionKey as a cookie in Electron's session
+async function setSessionCookie(sessionKey) {
+  await session.defaultSession.cookies.set({
+    url: 'https://claude.ai',
+    name: 'sessionKey',
+    value: sessionKey,
+    domain: '.claude.ai',
+    path: '/',
+    secure: true,
+    httpOnly: true
+  });
+  console.log('[Main] sessionKey cookie set in Electron session');
+}
+
 function createMainWindow() {
-  // Load saved position or use defaults
   const savedPosition = store.get('windowPosition');
   const windowOptions = {
     width: WIDGET_WIDTH,
@@ -35,21 +100,17 @@ function createMainWindow() {
     }
   };
 
-  // Apply saved position if it exists
   if (savedPosition) {
     windowOptions.x = savedPosition.x;
     windowOptions.y = savedPosition.y;
   }
 
   mainWindow = new BrowserWindow(windowOptions);
-
   mainWindow.loadFile('src/renderer/index.html');
 
-  // Make window draggable
   mainWindow.setAlwaysOnTop(true, 'floating');
   mainWindow.setVisibleOnAllWorkspaces(true);
 
-  // Save position when window is moved
   mainWindow.on('move', () => {
     const position = mainWindow.getBounds();
     store.set('windowPosition', { x: position.x, y: position.y });
@@ -59,265 +120,9 @@ function createMainWindow() {
     mainWindow = null;
   });
 
-  // Development tools
   if (process.env.NODE_ENV === 'development') {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
-}
-
-function createLoginWindow() {
-  loginWindow = new BrowserWindow({
-    width: 800,
-    height: 700,
-    parent: mainWindow,
-    modal: true,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true
-    }
-  });
-
-  loginWindow.loadURL('https://claude.ai');
-
-  let loginCheckInterval = null;
-  let hasLoggedIn = false;
-
-  // Function to check login status
-  async function checkLoginStatus() {
-    if (hasLoggedIn || !loginWindow) return;
-
-    try {
-      const cookies = await session.defaultSession.cookies.get({
-        url: 'https://claude.ai',
-        name: 'sessionKey'
-      });
-
-      if (cookies.length > 0) {
-        const sessionKey = cookies[0].value;
-        console.log('Session key found, attempting to get org ID...');
-
-        // Fetch org ID from API
-        let orgId = null;
-        try {
-          const response = await axios.get('https://claude.ai/api/organizations', {
-            headers: {
-              'Cookie': `sessionKey=${sessionKey}`,
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-          });
-
-          if (response.data && Array.isArray(response.data) && response.data.length > 0) {
-            orgId = response.data[0].uuid || response.data[0].id;
-            console.log('Org ID fetched from API:', orgId);
-          }
-        } catch (err) {
-          console.log('API not ready yet:', err.message);
-        }
-
-        if (sessionKey && orgId) {
-          hasLoggedIn = true;
-          if (loginCheckInterval) {
-            clearInterval(loginCheckInterval);
-            loginCheckInterval = null;
-          }
-
-          console.log('Sending login-success to main window...');
-          store.set('sessionKey', sessionKey);
-          store.set('organizationId', orgId);
-
-          if (mainWindow) {
-            mainWindow.webContents.send('login-success', { sessionKey, organizationId: orgId });
-            console.log('login-success sent');
-          } else {
-            console.error('mainWindow is null, cannot send login-success');
-          }
-
-          loginWindow.close();
-        }
-      }
-    } catch (error) {
-      console.error('Error in login check:', error);
-    }
-  }
-
-  // Check on page load
-  loginWindow.webContents.on('did-finish-load', async () => {
-    const url = loginWindow.webContents.getURL();
-    console.log('Login page loaded:', url);
-
-    if (url.includes('claude.ai')) {
-      await checkLoginStatus();
-    }
-  });
-
-  // Also check on navigation (URL changes)
-  loginWindow.webContents.on('did-navigate', async (event, url) => {
-    console.log('Navigated to:', url);
-    if (url.includes('claude.ai')) {
-      await checkLoginStatus();
-    }
-  });
-
-  // Poll periodically in case the session becomes ready without a page navigation
-  loginCheckInterval = setInterval(async () => {
-    if (!hasLoggedIn && loginWindow) {
-      await checkLoginStatus();
-    } else if (loginCheckInterval) {
-      clearInterval(loginCheckInterval);
-      loginCheckInterval = null;
-    }
-  }, 2000);
-
-  loginWindow.on('closed', () => {
-    if (loginCheckInterval) {
-      clearInterval(loginCheckInterval);
-      loginCheckInterval = null;
-    }
-    loginWindow = null;
-  });
-}
-
-// Attempt silent login in a hidden browser window
-async function attemptSilentLogin() {
-  console.log('[Main] Attempting silent login...');
-
-  // Notify renderer that we're trying to auto-login
-  if (mainWindow) {
-    mainWindow.webContents.send('silent-login-started');
-  }
-
-  return new Promise((resolve) => {
-    silentLoginWindow = new BrowserWindow({
-      width: 800,
-      height: 700,
-      show: false, // Hidden window
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true
-      }
-    });
-
-    silentLoginWindow.loadURL('https://claude.ai');
-
-    let loginCheckInterval = null;
-    let hasLoggedIn = false;
-    const SILENT_LOGIN_TIMEOUT = 15000; // 15 seconds timeout
-
-    // Function to check login status
-    async function checkLoginStatus() {
-      if (hasLoggedIn || !silentLoginWindow) return;
-
-      try {
-        const cookies = await session.defaultSession.cookies.get({
-          url: 'https://claude.ai',
-          name: 'sessionKey'
-        });
-
-        if (cookies.length > 0) {
-          const sessionKey = cookies[0].value;
-          console.log('[Main] Silent login: Session key found, attempting to get org ID...');
-
-          // Fetch org ID from API
-          let orgId = null;
-          try {
-            const response = await axios.get('https://claude.ai/api/organizations', {
-              headers: {
-                'Cookie': `sessionKey=${sessionKey}`,
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-              }
-            });
-
-            if (response.data && Array.isArray(response.data) && response.data.length > 0) {
-              orgId = response.data[0].uuid || response.data[0].id;
-              console.log('[Main] Silent login: Org ID fetched from API:', orgId);
-            }
-          } catch (err) {
-            console.log('[Main] Silent login: API not ready yet:', err.message);
-          }
-
-          if (sessionKey && orgId) {
-            hasLoggedIn = true;
-            if (loginCheckInterval) {
-              clearInterval(loginCheckInterval);
-              loginCheckInterval = null;
-            }
-
-            console.log('[Main] Silent login successful!');
-            store.set('sessionKey', sessionKey);
-            store.set('organizationId', orgId);
-
-            if (mainWindow) {
-              mainWindow.webContents.send('login-success', { sessionKey, organizationId: orgId });
-            }
-
-            silentLoginWindow.close();
-            resolve(true);
-          }
-        }
-      } catch (error) {
-        console.error('[Main] Silent login check error:', error);
-      }
-    }
-
-    // Check on page load
-    silentLoginWindow.webContents.on('did-finish-load', async () => {
-      const url = silentLoginWindow.webContents.getURL();
-      console.log('[Main] Silent login page loaded:', url);
-
-      if (url.includes('claude.ai')) {
-        await checkLoginStatus();
-      }
-    });
-
-    // Also check on navigation
-    silentLoginWindow.webContents.on('did-navigate', async (event, url) => {
-      console.log('[Main] Silent login navigated to:', url);
-      if (url.includes('claude.ai')) {
-        await checkLoginStatus();
-      }
-    });
-
-    // Poll periodically
-    loginCheckInterval = setInterval(async () => {
-      if (!hasLoggedIn && silentLoginWindow) {
-        await checkLoginStatus();
-      } else if (loginCheckInterval) {
-        clearInterval(loginCheckInterval);
-        loginCheckInterval = null;
-      }
-    }, 1000);
-
-    // Timeout - if silent login doesn't work, fall back to visible login
-    setTimeout(() => {
-      if (!hasLoggedIn) {
-        console.log('[Main] Silent login timeout, falling back to visible login...');
-        if (loginCheckInterval) {
-          clearInterval(loginCheckInterval);
-          loginCheckInterval = null;
-        }
-        if (silentLoginWindow) {
-          silentLoginWindow.close();
-        }
-
-        // Notify renderer that silent login failed
-        if (mainWindow) {
-          mainWindow.webContents.send('silent-login-failed');
-        }
-
-        // Open visible login window
-        createLoginWindow();
-        resolve(false);
-      }
-    }, SILENT_LOGIN_TIMEOUT);
-
-    silentLoginWindow.on('closed', () => {
-      if (loginCheckInterval) {
-        clearInterval(loginCheckInterval);
-        loginCheckInterval = null;
-      }
-      silentLoginWindow = null;
-    });
-  });
 }
 
 function createTray() {
@@ -345,17 +150,18 @@ function createTray() {
       },
       { type: 'separator' },
       {
-        label: 'Settings',
-        click: () => {
-          // TODO: Open settings window
-        }
-      },
-      {
-        label: 'Re-login',
-        click: () => {
+        label: 'Log Out',
+        click: async () => {
           store.delete('sessionKey');
           store.delete('organizationId');
-          createLoginWindow();
+          // Clear session cookies
+          const cookies = await session.defaultSession.cookies.get({ url: 'https://claude.ai' });
+          for (const cookie of cookies) {
+            await session.defaultSession.cookies.remove('https://claude.ai', cookie.name);
+          }
+          if (mainWindow) {
+            mainWindow.webContents.send('session-expired');
+          }
         }
       },
       { type: 'separator' },
@@ -388,32 +194,54 @@ ipcMain.handle('get-credentials', () => {
   };
 });
 
-ipcMain.handle('save-credentials', (event, { sessionKey, organizationId }) => {
+ipcMain.handle('save-credentials', async (event, { sessionKey, organizationId }) => {
   store.set('sessionKey', sessionKey);
   if (organizationId) {
     store.set('organizationId', organizationId);
   }
+  // Also set cookie in Electron session for window-based fetching
+  await setSessionCookie(sessionKey);
   return true;
 });
 
 ipcMain.handle('delete-credentials', async () => {
   store.delete('sessionKey');
   store.delete('organizationId');
-
-  // Clear the session cookie to ensure actual logout
-  try {
-    await session.defaultSession.cookies.remove('https://claude.ai', 'sessionKey');
-    // Also try checking for other auth cookies or clear storage if needed
-    // await session.defaultSession.clearStorageData({ storages: ['cookies'] });
-  } catch (error) {
-    console.error('Failed to clear cookies:', error);
+  const cookies = await session.defaultSession.cookies.get({ url: 'https://claude.ai' });
+  for (const cookie of cookies) {
+    await session.defaultSession.cookies.remove('https://claude.ai', cookie.name);
   }
-
   return true;
 });
 
-ipcMain.on('open-login', () => {
-  createLoginWindow();
+// Validate a sessionKey by fetching org ID via hidden BrowserWindow
+ipcMain.handle('validate-session-key', async (event, sessionKey) => {
+  console.log('[Main] Validating session key:', sessionKey.substring(0, 20) + '...');
+  try {
+    // Set the cookie in Electron's session first
+    await setSessionCookie(sessionKey);
+
+    // Fetch organizations using hidden BrowserWindow (bypasses Cloudflare)
+    const data = await fetchViaWindow('https://claude.ai/api/organizations');
+
+    if (data && Array.isArray(data) && data.length > 0) {
+      const orgId = data[0].uuid || data[0].id;
+      console.log('[Main] Session key validated, org ID:', orgId);
+      return { success: true, organizationId: orgId };
+    }
+
+    // Check if it's an error response
+    if (data && data.error) {
+      return { success: false, error: data.error.message || data.error };
+    }
+
+    return { success: false, error: 'No organization found. Response: ' + JSON.stringify(data).substring(0, 100) };
+  } catch (error) {
+    console.error('[Main] Session key validation failed:', error.message);
+    // Clean up the invalid cookie
+    await session.defaultSession.cookies.remove('https://claude.ai', 'sessionKey');
+    return { success: false, error: error.message };
+  }
 });
 
 ipcMain.on('minimize-window', () => {
@@ -422,6 +250,12 @@ ipcMain.on('minimize-window', () => {
 
 ipcMain.on('close-window', () => {
   app.quit();
+});
+
+ipcMain.on('resize-window', (event, height) => {
+  if (mainWindow) {
+    mainWindow.setContentSize(WIDGET_WIDTH, height);
+  }
 });
 
 ipcMain.handle('get-window-position', () => {
@@ -443,72 +277,98 @@ ipcMain.on('open-external', (event, url) => {
   shell.openExternal(url);
 });
 
+ipcMain.handle('detect-session-key', async () => {
+  // Clear any leftover sessionKey cookie
+  try {
+    await session.defaultSession.cookies.remove('https://claude.ai', 'sessionKey');
+  } catch (e) { /* ignore */ }
+
+  return new Promise((resolve) => {
+    const loginWin = new BrowserWindow({
+      width: 1000,
+      height: 700,
+      title: 'Log in to Claude',
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true
+      }
+    });
+
+    let resolved = false;
+
+    // Listen for sessionKey cookie being set after login
+    const onCookieChanged = (event, cookie, cause, removed) => {
+      if (
+        cookie.name === 'sessionKey' &&
+        cookie.domain.includes('claude.ai') &&
+        !removed &&
+        cookie.value
+      ) {
+        resolved = true;
+        session.defaultSession.cookies.removeListener('changed', onCookieChanged);
+        loginWin.close();
+        resolve({ success: true, sessionKey: cookie.value });
+      }
+    };
+
+    session.defaultSession.cookies.on('changed', onCookieChanged);
+
+    loginWin.on('closed', () => {
+      session.defaultSession.cookies.removeListener('changed', onCookieChanged);
+      if (!resolved) {
+        resolve({ success: false, error: 'Login window closed' });
+      }
+    });
+
+    loginWin.loadURL('https://claude.ai/login');
+  });
+});
+
 ipcMain.handle('fetch-usage-data', async () => {
-  console.log('[Main] fetch-usage-data handler called');
   const sessionKey = store.get('sessionKey');
   const organizationId = store.get('organizationId');
-
-  console.log('[Main] Credentials:', {
-    hasSessionKey: !!sessionKey,
-    organizationId
-  });
 
   if (!sessionKey || !organizationId) {
     throw new Error('Missing credentials');
   }
 
+  // Ensure cookie is set
+  await setSessionCookie(sessionKey);
+
   try {
-    console.log('[Main] Making API request to:', `https://claude.ai/api/organizations/${organizationId}/usage`);
-    const response = await axios.get(
-      `https://claude.ai/api/organizations/${organizationId}/usage`,
-      {
-        headers: {
-          'Cookie': `sessionKey=${sessionKey}`,
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-      }
+    const data = await fetchViaWindow(
+      `https://claude.ai/api/organizations/${organizationId}/usage`
     );
-    console.log('[Main] API request successful, status:', response.status);
-    return response.data;
+    return data;
   } catch (error) {
     console.error('[Main] API request failed:', error.message);
-    if (error.response) {
-      console.error('[Main] Response status:', error.response.status);
-      if (error.response.status === 401 || error.response.status === 403) {
-        // Session expired - attempt silent re-login
-        console.log('[Main] Session expired, attempting silent re-login...');
-        store.delete('sessionKey');
-        store.delete('organizationId');
-
-        // Don't clear cookies - we need them for silent login to work with OAuth
-        // The silent login will use existing Google/OAuth session if available
-
-        // Attempt silent login (will notify renderer appropriately)
-        attemptSilentLogin();
-
-        throw new Error('SessionExpired');
+    // Check if the error indicates auth failure
+    if (error.message.includes('Invalid JSON') && error.message.includes('Just a moment')) {
+      // Cloudflare blocked - session may be expired
+      store.delete('sessionKey');
+      store.delete('organizationId');
+      if (mainWindow) {
+        mainWindow.webContents.send('session-expired');
       }
+      throw new Error('SessionExpired');
     }
     throw error;
   }
 });
 
 // App lifecycle
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Restore session cookie if we have stored credentials
+  const sessionKey = store.get('sessionKey');
+  if (sessionKey) {
+    await setSessionCookie(sessionKey);
+  }
+
   createMainWindow();
   createTray();
-
-  // Check if we have credentials
-  // const hasCredentials = store.get('sessionKey') && store.get('organizationId');
-  // if (!hasCredentials) {
-  //   setTimeout(() => {
-  //     createLoginWindow();
-  //   }, 1000);
-  // }
 });
 
 app.on('window-all-closed', () => {
-  // Don't quit on macOS
   if (process.platform !== 'darwin') {
     // Keep running in tray
   }
