@@ -23,12 +23,6 @@ app.on('ready', () => {
   protocol.registerHttpProtocol('anthropic', (request, callback) => {
     console.log('[Protocol] Blocked anthropic:// request:', request.url);
   });
-
-  // Block external protocol requests globally
-  session.defaultSession.webRequest.onBeforeRequest({ urls: ['claude://*', 'anthropic://*'] }, (details, callback) => {
-    console.log('[WebRequest] Blocking protocol request:', details.url);
-    callback({ cancel: true });
-  });
 });
 
 // Prevent the app from opening external URLs with claude:// protocol
