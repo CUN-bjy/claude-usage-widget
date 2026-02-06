@@ -46,16 +46,17 @@
                     <div class="login-step1" id="loginStep1">
                         <div class="step-icon">
                             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="11" cy="11" r="8" />
-                                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                                <polyline points="10 17 15 12 10 7" />
+                                <line x1="15" y1="12" x2="3" y2="12" />
                             </svg>
                         </div>
                         <div class="step-text">
                             <h3>Connect to Claude.ai</h3>
-                            <p>Log in at <a href="#" id="openClaudeLink" class="open-browser-link">claude.ai</a>, close browser, then auto-detect</p>
+                            <p>Log in to your Claude account</p>
                             <p class="step-error" id="autoDetectError"></p>
                         </div>
-                        <button class="auto-detect-btn" id="autoDetectBtn">Auto-detect</button>
+                        <button class="auto-detect-btn" id="autoDetectBtn">Log in</button>
                         <button class="next-step-btn" id="nextStepBtn">Manual →</button>
                     </div>
 

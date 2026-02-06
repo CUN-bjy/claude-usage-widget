@@ -19,7 +19,6 @@ const elements = {
     loginStep2: document.getElementById('loginStep2'),
     autoDetectBtn: document.getElementById('autoDetectBtn'),
     autoDetectError: document.getElementById('autoDetectError'),
-    openClaudeLink: document.getElementById('openClaudeLink'),
     openBrowserLink: document.getElementById('openBrowserLink'),
     nextStepBtn: document.getElementById('nextStepBtn'),
     backStepBtn: document.getElementById('backStepBtn'),
@@ -70,14 +69,8 @@ async function init() {
 
 // Event Listeners
 function setupEventListeners() {
-    // Step 1: Auto-detect from browser
+    // Step 1: Login via BrowserWindow
     elements.autoDetectBtn.addEventListener('click', handleAutoDetect);
-
-    // Open claude.ai link in step 1
-    elements.openClaudeLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        window.electronAPI.openExternal('https://claude.ai');
-    });
 
     // Step navigation
     elements.nextStepBtn.addEventListener('click', () => {
@@ -209,17 +202,17 @@ async function handleConnect() {
 // Handle auto-detect from browser cookies
 async function handleAutoDetect() {
     elements.autoDetectBtn.disabled = true;
-    elements.autoDetectBtn.textContent = 'Detecting...';
+    elements.autoDetectBtn.textContent = 'Waiting...';
     elements.autoDetectError.textContent = '';
 
     try {
         const result = await window.electronAPI.detectSessionKey();
         if (!result.success) {
-            elements.autoDetectError.textContent = result.error || 'Not found';
+            elements.autoDetectError.textContent = result.error || 'Login failed';
             return;
         }
 
-        // Found a sessionKey, now validate it
+        // Got sessionKey from login, now validate it
         elements.autoDetectBtn.textContent = 'Validating...';
         const validation = await window.electronAPI.validateSessionKey(result.sessionKey);
 
@@ -234,13 +227,13 @@ async function handleAutoDetect() {
             startAutoUpdate();
         } else {
             elements.autoDetectError.textContent =
-                `Found in ${result.browser} but session expired. Try Manual →`;
+                'Session invalid. Try again or use Manual →';
         }
     } catch (error) {
-        elements.autoDetectError.textContent = error.message || 'Detection failed';
+        elements.autoDetectError.textContent = error.message || 'Login failed';
     } finally {
         elements.autoDetectBtn.disabled = false;
-        elements.autoDetectBtn.textContent = 'Auto-detect';
+        elements.autoDetectBtn.textContent = 'Log in';
     }
 }
 

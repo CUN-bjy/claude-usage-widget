@@ -1,8 +1,6 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, session, shell } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
-const { detectSessionKey } = require('./src/cookie-reader');
-
 const store = new Store({
   encryptionKey: 'claude-widget-secure-key-2024'
 });
@@ -280,13 +278,50 @@ ipcMain.on('open-external', (event, url) => {
 });
 
 ipcMain.handle('detect-session-key', async () => {
+  // Clear any leftover sessionKey cookie
   try {
-    const result = await detectSessionKey();
-    return result;
-  } catch (error) {
-    console.error('[Main] Cookie auto-detect failed:', error.message);
-    return { success: false, error: error.message };
-  }
+    await session.defaultSession.cookies.remove('https://claude.ai', 'sessionKey');
+  } catch (e) { /* ignore */ }
+
+  return new Promise((resolve) => {
+    const loginWin = new BrowserWindow({
+      width: 1000,
+      height: 700,
+      title: 'Log in to Claude',
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true
+      }
+    });
+
+    let resolved = false;
+
+    // Listen for sessionKey cookie being set after login
+    const onCookieChanged = (event, cookie, cause, removed) => {
+      if (
+        cookie.name === 'sessionKey' &&
+        cookie.domain.includes('claude.ai') &&
+        !removed &&
+        cookie.value
+      ) {
+        resolved = true;
+        session.defaultSession.cookies.removeListener('changed', onCookieChanged);
+        loginWin.close();
+        resolve({ success: true, sessionKey: cookie.value });
+      }
+    };
+
+    session.defaultSession.cookies.on('changed', onCookieChanged);
+
+    loginWin.on('closed', () => {
+      session.defaultSession.cookies.removeListener('changed', onCookieChanged);
+      if (!resolved) {
+        resolve({ success: false, error: 'Login window closed' });
+      }
+    });
+
+    loginWin.loadURL('https://claude.ai/login');
+  });
 });
 
 ipcMain.handle('fetch-usage-data', async () => {
