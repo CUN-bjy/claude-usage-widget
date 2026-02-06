@@ -1,7 +1,6 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, session, shell } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
-const axios = require('axios');
 
 const store = new Store({
   encryptionKey: 'claude-widget-secure-key-2024'
@@ -12,9 +11,77 @@ const CHROME_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit
 let mainWindow = null;
 let tray = null;
 
-// Window configuration
 const WIDGET_WIDTH = 480;
 const WIDGET_HEIGHT = 140;
+
+// Set session-level User-Agent to avoid Electron detection
+app.on('ready', () => {
+  session.defaultSession.setUserAgent(CHROME_USER_AGENT);
+});
+
+// Fetch a JSON API endpoint using a hidden BrowserWindow (bypasses Cloudflare)
+function fetchViaWindow(url) {
+  return new Promise((resolve, reject) => {
+    const win = new BrowserWindow({
+      width: 800,
+      height: 600,
+      show: false,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true
+      }
+    });
+
+    const timeout = setTimeout(() => {
+      win.close();
+      reject(new Error('Request timeout'));
+    }, 30000);
+
+    win.webContents.on('did-finish-load', async () => {
+      try {
+        // Extract the text content of the page (API returns JSON as text)
+        const bodyText = await win.webContents.executeJavaScript(
+          'document.body.innerText || document.body.textContent'
+        );
+        clearTimeout(timeout);
+        win.close();
+
+        try {
+          const data = JSON.parse(bodyText);
+          resolve(data);
+        } catch (parseErr) {
+          reject(new Error('Invalid JSON: ' + bodyText.substring(0, 200)));
+        }
+      } catch (err) {
+        clearTimeout(timeout);
+        win.close();
+        reject(err);
+      }
+    });
+
+    win.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+      clearTimeout(timeout);
+      win.close();
+      reject(new Error(`Load failed: ${errorCode} ${errorDescription}`));
+    });
+
+    win.loadURL(url);
+  });
+}
+
+// Set sessionKey as a cookie in Electron's session
+async function setSessionCookie(sessionKey) {
+  await session.defaultSession.cookies.set({
+    url: 'https://claude.ai',
+    name: 'sessionKey',
+    value: sessionKey,
+    domain: '.claude.ai',
+    path: '/',
+    secure: true,
+    httpOnly: true
+  });
+  console.log('[Main] sessionKey cookie set in Electron session');
+}
 
 function createMainWindow() {
   const savedPosition = store.get('windowPosition');
@@ -85,9 +152,14 @@ function createTray() {
       { type: 'separator' },
       {
         label: 'Log Out',
-        click: () => {
+        click: async () => {
           store.delete('sessionKey');
           store.delete('organizationId');
+          // Clear session cookies
+          const cookies = await session.defaultSession.cookies.get({ url: 'https://claude.ai' });
+          for (const cookie of cookies) {
+            await session.defaultSession.cookies.remove('https://claude.ai', cookie.name);
+          }
           if (mainWindow) {
             mainWindow.webContents.send('session-expired');
           }
@@ -123,58 +195,53 @@ ipcMain.handle('get-credentials', () => {
   };
 });
 
-ipcMain.handle('save-credentials', (event, { sessionKey, organizationId }) => {
+ipcMain.handle('save-credentials', async (event, { sessionKey, organizationId }) => {
   store.set('sessionKey', sessionKey);
   if (organizationId) {
     store.set('organizationId', organizationId);
   }
+  // Also set cookie in Electron session for window-based fetching
+  await setSessionCookie(sessionKey);
   return true;
 });
 
 ipcMain.handle('delete-credentials', async () => {
   store.delete('sessionKey');
   store.delete('organizationId');
+  const cookies = await session.defaultSession.cookies.get({ url: 'https://claude.ai' });
+  for (const cookie of cookies) {
+    await session.defaultSession.cookies.remove('https://claude.ai', cookie.name);
+  }
   return true;
 });
 
-// Validate a sessionKey by fetching org ID from Claude API
+// Validate a sessionKey by fetching org ID via hidden BrowserWindow
 ipcMain.handle('validate-session-key', async (event, sessionKey) => {
   console.log('[Main] Validating session key:', sessionKey.substring(0, 20) + '...');
   try {
-    const response = await axios.get('https://claude.ai/api/organizations', {
-      headers: {
-        'Cookie': `sessionKey=${sessionKey}`,
-        'User-Agent': CHROME_USER_AGENT,
-        'Accept': '*/*'
-      },
-      maxRedirects: 5,
-      validateStatus: (status) => status < 500 // Don't throw on 4xx, let us inspect
-    });
+    // Set the cookie in Electron's session first
+    await setSessionCookie(sessionKey);
 
-    console.log('[Main] Validate response status:', response.status);
-    console.log('[Main] Validate response data:', JSON.stringify(response.data).substring(0, 500));
-    console.log('[Main] Validate response headers:', JSON.stringify(response.headers));
+    // Fetch organizations using hidden BrowserWindow (bypasses Cloudflare)
+    const data = await fetchViaWindow('https://claude.ai/api/organizations');
 
-    if (response.status === 401 || response.status === 403) {
-      const dataStr = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
-      const debugInfo = `HTTP ${response.status} | ${dataStr.substring(0, 150)}`;
-      return { success: false, error: debugInfo };
-    }
-
-    if (response.data && Array.isArray(response.data) && response.data.length > 0) {
-      const orgId = response.data[0].uuid || response.data[0].id;
+    if (data && Array.isArray(data) && data.length > 0) {
+      const orgId = data[0].uuid || data[0].id;
       console.log('[Main] Session key validated, org ID:', orgId);
       return { success: true, organizationId: orgId };
     }
 
-    return { success: false, error: 'No organization found. Response: ' + JSON.stringify(response.data).substring(0, 100) };
+    // Check if it's an error response
+    if (data && data.error) {
+      return { success: false, error: data.error.message || data.error };
+    }
+
+    return { success: false, error: 'No organization found. Response: ' + JSON.stringify(data).substring(0, 100) };
   } catch (error) {
     console.error('[Main] Session key validation failed:', error.message);
-    if (error.response) {
-      console.error('[Main] Response status:', error.response.status);
-      console.error('[Main] Response data:', JSON.stringify(error.response.data).substring(0, 500));
-    }
-    return { success: false, error: 'Connection failed: ' + error.message };
+    // Clean up the invalid cookie
+    await session.defaultSession.cookies.remove('https://claude.ai', 'sessionKey');
+    return { success: false, error: error.message };
   }
 });
 
@@ -213,24 +280,19 @@ ipcMain.handle('fetch-usage-data', async () => {
     throw new Error('Missing credentials');
   }
 
+  // Ensure cookie is set
+  await setSessionCookie(sessionKey);
+
   try {
-    const response = await axios.get(
-      `https://claude.ai/api/organizations/${organizationId}/usage`,
-      {
-        headers: {
-          'Cookie': `sessionKey=${sessionKey}`,
-          'User-Agent': CHROME_USER_AGENT,
-          'Accept': 'application/json',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Referer': 'https://claude.ai/',
-          'Origin': 'https://claude.ai'
-        }
-      }
+    const data = await fetchViaWindow(
+      `https://claude.ai/api/organizations/${organizationId}/usage`
     );
-    return response.data;
+    return data;
   } catch (error) {
     console.error('[Main] API request failed:', error.message);
-    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+    // Check if the error indicates auth failure
+    if (error.message.includes('Invalid JSON') && error.message.includes('Just a moment')) {
+      // Cloudflare blocked - session may be expired
       store.delete('sessionKey');
       store.delete('organizationId');
       if (mainWindow) {
@@ -243,7 +305,13 @@ ipcMain.handle('fetch-usage-data', async () => {
 });
 
 // App lifecycle
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Restore session cookie if we have stored credentials
+  const sessionKey = store.get('sessionKey');
+  if (sessionKey) {
+    await setSessionCookie(sessionKey);
+  }
+
   createMainWindow();
   createTray();
 });

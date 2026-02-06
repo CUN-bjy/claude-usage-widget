@@ -23,8 +23,7 @@
     "cross-env": "^7.0.3"
   },
   "dependencies": {
-    "electron-store": "^8.1.0",
-    "axios": "^1.6.2"
+    "electron-store": "^8.1.0"
   },
   "build": {
     "appId": "com.claudeusage.widget",
