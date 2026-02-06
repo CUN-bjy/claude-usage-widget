@@ -154,16 +154,39 @@ function readSessionKeyCookie(cookiePath, masterKey) {
     // without these the main file may appear to have no tables)
     const walSrc = cookiePath + '-wal';
     const shmSrc = cookiePath + '-shm';
+    let walCopied = false;
     if (fs.existsSync(walSrc)) {
-      try { copyLockedFile(walSrc, tmpDb + '-wal'); } catch (e) { /* non-fatal */ }
+      try {
+        copyLockedFile(walSrc, tmpDb + '-wal');
+        walCopied = true;
+      } catch (e) {
+        console.log(`[CookieReader] WAL copy failed: ${e.message}`);
+      }
     }
     if (fs.existsSync(shmSrc)) {
-      try { copyLockedFile(shmSrc, tmpDb + '-shm'); } catch (e) { /* non-fatal */ }
+      try {
+        copyLockedFile(shmSrc, tmpDb + '-shm');
+      } catch (e) {
+        console.log(`[CookieReader] SHM copy failed: ${e.message}`);
+      }
     }
 
     // Open writable so SQLite can perform WAL recovery (merges WAL → main DB)
     const Database = require('better-sqlite3');
     const db = new Database(tmpDb);
+
+    // Check if cookies table exists; if not and WAL wasn't copied, report clearly
+    const tableCheck = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='cookies'"
+    ).get();
+
+    if (!tableCheck) {
+      db.close();
+      const reason = fs.existsSync(walSrc)
+        ? (walCopied ? 'WAL was copied but table still missing' : 'WAL file exists but copy failed')
+        : 'No WAL file found and table not in main DB';
+      throw new Error(`cookies table not found (${reason})`);
+    }
 
     let sessionKey = null;
     try {
