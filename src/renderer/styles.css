@@ -288,10 +288,14 @@ body {
 
 .session-key-error {
     color: #ef4444;
-    font-size: 10px;
+    font-size: 9px;
     min-height: 14px;
+    max-height: 40px;
+    overflow-y: auto;
     margin: 0;
     flex: 1;
+    word-break: break-all;
+    font-family: monospace;
 }
 
 .back-step-btn {

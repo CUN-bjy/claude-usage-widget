@@ -156,12 +156,9 @@ ipcMain.handle('validate-session-key', async (event, sessionKey) => {
     console.log('[Main] Validate response headers:', JSON.stringify(response.headers));
 
     if (response.status === 401 || response.status === 403) {
-      // Check if it's a Cloudflare challenge or actual auth failure
       const dataStr = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
-      if (dataStr.includes('cloudflare') || dataStr.includes('cf-') || dataStr.includes('challenge')) {
-        return { success: false, error: 'Blocked by Cloudflare. Try again later.' };
-      }
-      return { success: false, error: 'Invalid or expired session key (HTTP ' + response.status + ')' };
+      const debugInfo = `HTTP ${response.status} | ${dataStr.substring(0, 150)}`;
+      return { success: false, error: debugInfo };
     }
 
     if (response.data && Array.isArray(response.data) && response.data.length > 0) {
