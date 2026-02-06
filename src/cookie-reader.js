@@ -115,22 +115,25 @@ function getMasterKey(userDataPath) {
  * Chrome holds exclusive locks on its cookie DB; this bypasses the lock.
  */
 function copyLockedFile(srcPath, destPath) {
-  const psScript = [
-    `$src = [System.IO.File]::Open('${srcPath.replace(/'/g, "''")}',`,
-    '  [System.IO.FileMode]::Open,',
-    '  [System.IO.FileAccess]::Read,',
-    '  [System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete);',
-    `$dst = [System.IO.File]::Create('${destPath.replace(/'/g, "''")}');`,
-    '$src.CopyTo($dst);',
-    '$dst.Close();',
-    '$src.Close()'
-  ].join(' ');
+  const tmpPs1 = path.join(os.tmpdir(), `claude_copy_${Date.now()}.ps1`);
+  const script = [
+    `$share = [System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete`,
+    `$src = [System.IO.File]::Open('${srcPath.replace(/'/g, "''")}', [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, $share)`,
+    `$dst = [System.IO.File]::Create('${destPath.replace(/'/g, "''")}')`,
+    `$src.CopyTo($dst)`,
+    `$dst.Close()`,
+    `$src.Close()`
+  ].join('\n');
 
-  const encoded = Buffer.from(psScript, 'utf16le').toString('base64');
-  execSync(
-    `powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`,
-    { timeout: 15000 }
-  );
+  fs.writeFileSync(tmpPs1, script, 'utf8');
+  try {
+    execSync(
+      `powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${tmpPs1}"`,
+      { timeout: 15000, stdio: ['pipe', 'pipe', 'pipe'] }
+    );
+  } finally {
+    try { fs.unlinkSync(tmpPs1); } catch {}
+  }
 }
 
 /**
