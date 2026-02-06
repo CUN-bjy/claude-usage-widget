@@ -9,6 +9,7 @@ A beautiful, standalone Windows desktop widget that displays your Claude.ai usag
 - 🎯 **Real-time Usage Tracking** - Monitor both session and weekly usage limits
 - 📊 **Visual Progress Bars** - Clean, gradient progress indicators
 - ⏱️ **Countdown Timers** - Circular timers showing time until reset
+- 🔍 **Expandable Details** - Click to see per-model breakdown (Sonnet, Opus, etc.)
 - 🔄 **Auto-refresh** - Updates every 5 minutes automatically
 - 🎨 **Modern UI** - Sleek, draggable widget with dark theme
 - 🔒 **Secure** - Encrypted credential storage
@@ -52,10 +53,12 @@ The installer will be created in the `dist/` folder.
 ### First Launch
 
 1. Launch the widget
-2. Click "Login to Claude" when prompted
-3. A browser window will open - login to your Claude.ai account
+2. Click "Log in" when prompted
+3. A browser window will open — log in to your Claude.ai account
 4. The widget will automatically capture your session
 5. Usage data will start displaying immediately
+
+**Alternative:** Click "Manual →" to paste a `sessionKey` directly from browser DevTools (F12 → Application → Cookies)
 
 ### Widget Controls
 
@@ -69,8 +72,7 @@ The installer will be created in the `dist/` folder.
 Right-click the tray icon for:
 - Show/Hide widget
 - Refresh usage data
-- Re-login (if session expires)
-- Settings (coming soon)
+- Log out / Re-login
 - Exit application
 
 ## Understanding the Display
@@ -107,7 +109,7 @@ const UPDATE_INTERVAL = 5 * 60 * 1000; // Change to your preference (in millisec
 
 ### "Login Required" keeps appearing
 - Your Claude.ai session may have expired
-- Click "Login to Claude" to re-authenticate
+- Click "Log in" to re-authenticate
 - Check that you're logging into the correct account
 
 ### Widget not updating
