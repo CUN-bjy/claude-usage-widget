@@ -256,7 +256,7 @@ ipcMain.on('close-window', () => {
 
 ipcMain.on('resize-window', (event, height) => {
   if (mainWindow) {
-    mainWindow.setSize(WIDGET_WIDTH, height);
+    mainWindow.setContentSize(WIDGET_WIDTH, height);
   }
 });
 
