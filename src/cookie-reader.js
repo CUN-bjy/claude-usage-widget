@@ -1,6 +1,5 @@
 const path = require('path');
 const fs = require('fs');
-const os = require('os');
 const crypto = require('crypto');
 const { execSync } = require('child_process');
 
@@ -114,55 +113,38 @@ function getMasterKey(userDataPath) {
  * Read the sessionKey cookie from a Chromium Cookies SQLite database.
  */
 async function readSessionKeyCookie(cookiePath, masterKey) {
-  const tmpDir = os.tmpdir();
-  const tmpBase = path.join(tmpDir, `claude_cookies_${Date.now()}`);
-  const tmpDb = tmpBase + '.db';
-
-  try {
-    // Copy DB files to temp to avoid browser lock
-    fs.copyFileSync(cookiePath, tmpDb);
-    const walPath = cookiePath + '-wal';
-    const shmPath = cookiePath + '-shm';
-    if (fs.existsSync(walPath)) fs.copyFileSync(walPath, tmpDb + '-wal');
-    if (fs.existsSync(shmPath)) fs.copyFileSync(shmPath, tmpDb + '-shm');
-
-    // Load sql.js with WASM binary
-    const initSqlJs = require('sql.js');
-    const wasmPath = path.join(__dirname, '..', 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm');
-    let sqlOpts = {};
-    if (fs.existsSync(wasmPath)) {
-      sqlOpts.wasmBinary = fs.readFileSync(wasmPath);
-    }
-    const SQL = await initSqlJs(sqlOpts);
-
-    const dbBuffer = fs.readFileSync(tmpDb);
-    const db = new SQL.Database(dbBuffer);
-
-    let sessionKey = null;
-    try {
-      const stmt = db.prepare(
-        "SELECT encrypted_value FROM cookies WHERE (host_key = '.claude.ai' OR host_key = 'claude.ai') AND name = 'sessionKey' LIMIT 1"
-      );
-
-      if (stmt.step()) {
-        const row = stmt.get();
-        const encryptedValue = Buffer.from(row[0]);
-        if (encryptedValue.length > 0) {
-          sessionKey = decryptCookieValue(encryptedValue, masterKey);
-        }
-      }
-      stmt.free();
-    } finally {
-      db.close();
-    }
-
-    return sessionKey;
-  } finally {
-    // Clean up temp files
-    try { fs.unlinkSync(tmpDb); } catch {}
-    try { fs.unlinkSync(tmpDb + '-wal'); } catch {}
-    try { fs.unlinkSync(tmpDb + '-shm'); } catch {}
+  // Load sql.js with WASM binary
+  const initSqlJs = require('sql.js');
+  const wasmPath = path.join(__dirname, '..', 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm');
+  let sqlOpts = {};
+  if (fs.existsSync(wasmPath)) {
+    sqlOpts.wasmBinary = fs.readFileSync(wasmPath);
   }
+  const SQL = await initSqlJs(sqlOpts);
+
+  // Read DB directly into memory (Chrome allows shared read while running)
+  const dbBuffer = fs.readFileSync(cookiePath);
+  const db = new SQL.Database(dbBuffer);
+
+  let sessionKey = null;
+  try {
+    const stmt = db.prepare(
+      "SELECT encrypted_value FROM cookies WHERE (host_key = '.claude.ai' OR host_key = 'claude.ai') AND name = 'sessionKey' LIMIT 1"
+    );
+
+    if (stmt.step()) {
+      const row = stmt.get();
+      const encryptedValue = Buffer.from(row[0]);
+      if (encryptedValue.length > 0) {
+        sessionKey = decryptCookieValue(encryptedValue, masterKey);
+      }
+    }
+    stmt.free();
+  } finally {
+    db.close();
+  }
+
+  return sessionKey;
 }
 
 /**
