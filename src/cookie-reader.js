@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const crypto = require('crypto');
 const { execSync } = require('child_process');
 
@@ -110,41 +111,72 @@ function getMasterKey(userDataPath) {
 }
 
 /**
+ * Copy a locked file using PowerShell FileStream with shared read access.
+ * Chrome holds exclusive locks on its cookie DB; this bypasses the lock.
+ */
+function copyLockedFile(srcPath, destPath) {
+  const psScript = [
+    `$src = [System.IO.File]::Open('${srcPath.replace(/'/g, "''")}',`,
+    '  [System.IO.FileMode]::Open,',
+    '  [System.IO.FileAccess]::Read,',
+    '  [System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete);',
+    `$dst = [System.IO.File]::Create('${destPath.replace(/'/g, "''")}');`,
+    '$src.CopyTo($dst);',
+    '$dst.Close();',
+    '$src.Close()'
+  ].join(' ');
+
+  const encoded = Buffer.from(psScript, 'utf16le').toString('base64');
+  execSync(
+    `powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`,
+    { timeout: 15000 }
+  );
+}
+
+/**
  * Read the sessionKey cookie from a Chromium Cookies SQLite database.
  */
 async function readSessionKeyCookie(cookiePath, masterKey) {
-  // Load sql.js with WASM binary
-  const initSqlJs = require('sql.js');
-  const wasmPath = path.join(__dirname, '..', 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm');
-  let sqlOpts = {};
-  if (fs.existsSync(wasmPath)) {
-    sqlOpts.wasmBinary = fs.readFileSync(wasmPath);
-  }
-  const SQL = await initSqlJs(sqlOpts);
+  const tmpDb = path.join(os.tmpdir(), `claude_cookies_${Date.now()}.db`);
 
-  // Read DB directly into memory (Chrome allows shared read while running)
-  const dbBuffer = fs.readFileSync(cookiePath);
-  const db = new SQL.Database(dbBuffer);
-
-  let sessionKey = null;
   try {
-    const stmt = db.prepare(
-      "SELECT encrypted_value FROM cookies WHERE (host_key = '.claude.ai' OR host_key = 'claude.ai') AND name = 'sessionKey' LIMIT 1"
-    );
+    // Copy locked DB via PowerShell shared-read FileStream
+    copyLockedFile(cookiePath, tmpDb);
 
-    if (stmt.step()) {
-      const row = stmt.get();
-      const encryptedValue = Buffer.from(row[0]);
-      if (encryptedValue.length > 0) {
-        sessionKey = decryptCookieValue(encryptedValue, masterKey);
-      }
+    // Load sql.js with WASM binary
+    const initSqlJs = require('sql.js');
+    const wasmPath = path.join(__dirname, '..', 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm');
+    let sqlOpts = {};
+    if (fs.existsSync(wasmPath)) {
+      sqlOpts.wasmBinary = fs.readFileSync(wasmPath);
     }
-    stmt.free();
-  } finally {
-    db.close();
-  }
+    const SQL = await initSqlJs(sqlOpts);
 
-  return sessionKey;
+    const dbBuffer = fs.readFileSync(tmpDb);
+    const db = new SQL.Database(dbBuffer);
+
+    let sessionKey = null;
+    try {
+      const stmt = db.prepare(
+        "SELECT encrypted_value FROM cookies WHERE (host_key = '.claude.ai' OR host_key = 'claude.ai') AND name = 'sessionKey' LIMIT 1"
+      );
+
+      if (stmt.step()) {
+        const row = stmt.get();
+        const encryptedValue = Buffer.from(row[0]);
+        if (encryptedValue.length > 0) {
+          sessionKey = decryptCookieValue(encryptedValue, masterKey);
+        }
+      }
+      stmt.free();
+    } finally {
+      db.close();
+    }
+
+    return sessionKey;
+  } finally {
+    try { fs.unlinkSync(tmpDb); } catch {}
+  }
 }
 
 /**
