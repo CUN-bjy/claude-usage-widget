@@ -137,74 +137,83 @@ function copyLockedFile(srcPath, destPath) {
 }
 
 /**
+ * Query sessionKey from a better-sqlite3 Database instance.
+ */
+function queryCookie(db, masterKey) {
+  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
+  const tableNames = tables.map(t => t.name);
+  console.log(`[CookieReader] Tables: ${tableNames.join(', ') || '(empty)'}`);
+
+  if (!tableNames.includes('cookies')) {
+    throw new Error(`cookies table not found (tables: ${tableNames.join(', ') || 'none'})`);
+  }
+
+  const row = db.prepare(
+    "SELECT encrypted_value FROM cookies WHERE (host_key = '.claude.ai' OR host_key = 'claude.ai') AND name = 'sessionKey' LIMIT 1"
+  ).get();
+
+  if (row && row.encrypted_value) {
+    return decryptCookieValue(Buffer.from(row.encrypted_value), masterKey);
+  }
+  return null;
+}
+
+/**
  * Read the sessionKey cookie from a Chromium Cookies SQLite database.
- * Copies main DB + WAL + SHM to temp so better-sqlite3 gets full data.
+ * Strategy 1: Open directly via SQLite VFS (handles shared access natively).
+ * Strategy 2: Copy via PowerShell FileStream + open copy.
  */
 function readSessionKeyCookie(cookiePath, masterKey) {
+  const Database = require('better-sqlite3');
+
+  // Strategy 1: Direct open (SQLite's VFS uses FILE_SHARE_READ|WRITE|DELETE)
+  // Works when browser is closed, and sometimes even when running.
+  try {
+    const db = new Database(cookiePath, { readonly: true });
+    try {
+      return queryCookie(db, masterKey);
+    } finally {
+      db.close();
+    }
+  } catch (directErr) {
+    console.log(`[CookieReader] Direct open failed: ${directErr.message}`);
+  }
+
+  // Strategy 2: Copy files via PowerShell, then open the copy
   const tmpDir = path.join(os.tmpdir(), `claude_cookies_${Date.now()}`);
   fs.mkdirSync(tmpDir, { recursive: true });
-
   const tmpDb = path.join(tmpDir, 'Cookies');
 
   try {
-    // Copy main DB file (always required)
     copyLockedFile(cookiePath, tmpDb);
 
-    // Copy WAL and SHM files if they exist (Chrome uses WAL mode;
-    // without these the main file may appear to have no tables)
+    // Verify the copy is not empty
+    const stats = fs.statSync(tmpDb);
+    console.log(`[CookieReader] Copied DB size: ${stats.size} bytes`);
+    if (stats.size < 100) {
+      throw new Error(`Copied DB too small (${stats.size} bytes), likely empty`);
+    }
+
+    // Also copy WAL and SHM for complete data
     const walSrc = cookiePath + '-wal';
     const shmSrc = cookiePath + '-shm';
-    let walCopied = false;
     if (fs.existsSync(walSrc)) {
-      try {
-        copyLockedFile(walSrc, tmpDb + '-wal');
-        walCopied = true;
-      } catch (e) {
+      try { copyLockedFile(walSrc, tmpDb + '-wal'); } catch (e) {
         console.log(`[CookieReader] WAL copy failed: ${e.message}`);
       }
     }
     if (fs.existsSync(shmSrc)) {
-      try {
-        copyLockedFile(shmSrc, tmpDb + '-shm');
-      } catch (e) {
+      try { copyLockedFile(shmSrc, tmpDb + '-shm'); } catch (e) {
         console.log(`[CookieReader] SHM copy failed: ${e.message}`);
       }
     }
 
-    // Open writable so SQLite can perform WAL recovery (merges WAL → main DB)
-    const Database = require('better-sqlite3');
     const db = new Database(tmpDb);
-
-    // Check if cookies table exists; if not and WAL wasn't copied, report clearly
-    const tableCheck = db.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='cookies'"
-    ).get();
-
-    if (!tableCheck) {
-      db.close();
-      const reason = fs.existsSync(walSrc)
-        ? (walCopied ? 'WAL was copied but table still missing' : 'WAL file exists but copy failed')
-        : 'No WAL file found and table not in main DB';
-      throw new Error(`cookies table not found (${reason})`);
-    }
-
-    let sessionKey = null;
     try {
-      const row = db.prepare(
-        "SELECT encrypted_value FROM cookies WHERE (host_key = '.claude.ai' OR host_key = 'claude.ai') AND name = 'sessionKey' LIMIT 1"
-      ).get();
-
-      if (row && row.encrypted_value) {
-        const encryptedValue = Buffer.from(row.encrypted_value);
-        if (encryptedValue.length > 0) {
-          sessionKey = decryptCookieValue(encryptedValue, masterKey);
-        }
-      }
+      return queryCookie(db, masterKey);
     } finally {
       db.close();
     }
-
-    return sessionKey;
   } finally {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   }
