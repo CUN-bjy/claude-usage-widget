@@ -161,9 +161,9 @@ function readSessionKeyCookie(cookiePath, masterKey) {
       try { copyLockedFile(shmSrc, tmpDb + '-shm'); } catch (e) { /* non-fatal */ }
     }
 
-    // better-sqlite3 opens file-based DB and handles WAL automatically
+    // Open writable so SQLite can perform WAL recovery (merges WAL → main DB)
     const Database = require('better-sqlite3');
-    const db = new Database(tmpDb, { readonly: true });
+    const db = new Database(tmpDb);
 
     let sessionKey = null;
     try {
