@@ -69,16 +69,16 @@ function detectSessionKey() {
     }
   }
 
+  const detail = errors.length > 0 ? '\n' + errors.join('\n') : '';
+
   if (hadLockError) {
     throw new Error(
-      'Browser is locking the cookie database.\n' +
-      'Fully quit your browser (also check the system tray), then try again.'
+      'Cookie DB locked. Fully quit browser (check system tray too).' + detail
     );
   }
 
-  const detail = errors.length > 0 ? '\n' + errors.join('\n') : '';
   throw new Error(
-    'No sessionKey found. Make sure you are logged into claude.ai in Chrome or Edge.' + detail
+    'No sessionKey found. Log into claude.ai in Chrome/Edge first.' + detail
   );
 }
 
@@ -119,6 +119,41 @@ function getMasterKey(userDataPath) {
 }
 
 /**
+ * Copy a file, falling back to PowerShell FileStream if Node.js fails (EBUSY).
+ * PowerShell can open with FileShare.ReadWrite|Delete to bypass browser locks.
+ */
+function copyFileWithFallback(src, dest) {
+  try {
+    fs.copyFileSync(src, dest);
+  } catch (err) {
+    if (err.code !== 'EBUSY' && err.code !== 'EPERM') throw err;
+
+    // Fallback: PowerShell FileStream with shared read access
+    const psSrc = src.replace(/'/g, "''");
+    const psDest = dest.replace(/'/g, "''");
+    const psScript = [
+      '$share = [System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete;',
+      `$src = [System.IO.File]::Open('${psSrc}', 'Open', 'Read', $share);`,
+      `$dest = [System.IO.File]::Create('${psDest}');`,
+      '$src.CopyTo($dest);',
+      '$dest.Close();',
+      '$src.Close();'
+    ].join(' ');
+
+    const tempPs1 = path.join(os.tmpdir(), `claude-copy-${Date.now()}.ps1`);
+    fs.writeFileSync(tempPs1, psScript);
+    try {
+      execSync(
+        `powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${tempPs1}"`,
+        { timeout: 10000 }
+      );
+    } finally {
+      try { fs.unlinkSync(tempPs1); } catch (e) { /* ignore */ }
+    }
+  }
+}
+
+/**
  * Read the sessionKey cookie from a Chromium Cookies SQLite database.
  * Copies DB files to temp dir first to avoid lock conflicts with running browser.
  */
@@ -127,8 +162,8 @@ function readSessionKeyCookie(cookiePath, masterKey) {
   const tempDbPath = path.join(tempDir, 'Cookies');
 
   try {
-    // Copy main DB file
-    fs.copyFileSync(cookiePath, tempDbPath);
+    // Copy main DB file (try Node.js first, PowerShell fallback for locked files)
+    copyFileWithFallback(cookiePath, tempDbPath);
 
     // Verify copy is not empty
     const stat = fs.statSync(tempDbPath);
@@ -140,10 +175,10 @@ function readSessionKeyCookie(cookiePath, masterKey) {
     const walPath = cookiePath + '-wal';
     const shmPath = cookiePath + '-shm';
     if (fs.existsSync(walPath)) {
-      fs.copyFileSync(walPath, tempDbPath + '-wal');
+      copyFileWithFallback(walPath, tempDbPath + '-wal');
     }
     if (fs.existsSync(shmPath)) {
-      fs.copyFileSync(shmPath, tempDbPath + '-shm');
+      copyFileWithFallback(shmPath, tempDbPath + '-shm');
     }
 
     // Load better-sqlite3 - may fail if native module not unpacked from asar
