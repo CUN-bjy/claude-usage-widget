@@ -19,6 +19,7 @@ const elements = {
     loginStep2: document.getElementById('loginStep2'),
     autoDetectBtn: document.getElementById('autoDetectBtn'),
     autoDetectError: document.getElementById('autoDetectError'),
+    openClaudeLink: document.getElementById('openClaudeLink'),
     openBrowserLink: document.getElementById('openBrowserLink'),
     nextStepBtn: document.getElementById('nextStepBtn'),
     backStepBtn: document.getElementById('backStepBtn'),
@@ -71,6 +72,12 @@ async function init() {
 function setupEventListeners() {
     // Step 1: Auto-detect from browser
     elements.autoDetectBtn.addEventListener('click', handleAutoDetect);
+
+    // Open claude.ai link in step 1
+    elements.openClaudeLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.electronAPI.openExternal('https://claude.ai');
+    });
 
     // Step navigation
     elements.nextStepBtn.addEventListener('click', () => {
