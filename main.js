@@ -139,13 +139,21 @@ ipcMain.handle('delete-credentials', async () => {
 
 // Validate a sessionKey by fetching org ID from Claude API
 ipcMain.handle('validate-session-key', async (event, sessionKey) => {
+  console.log('[Main] Validating session key:', sessionKey.substring(0, 20) + '...');
   try {
     const response = await axios.get('https://claude.ai/api/organizations', {
       headers: {
         'Cookie': `sessionKey=${sessionKey}`,
-        'User-Agent': CHROME_USER_AGENT
+        'User-Agent': CHROME_USER_AGENT,
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://claude.ai/',
+        'Origin': 'https://claude.ai'
       }
     });
+
+    console.log('[Main] Validate response status:', response.status);
+    console.log('[Main] Validate response data:', JSON.stringify(response.data).substring(0, 200));
 
     if (response.data && Array.isArray(response.data) && response.data.length > 0) {
       const orgId = response.data[0].uuid || response.data[0].id;
@@ -156,10 +164,15 @@ ipcMain.handle('validate-session-key', async (event, sessionKey) => {
     return { success: false, error: 'No organization found' };
   } catch (error) {
     console.error('[Main] Session key validation failed:', error.message);
-    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-      return { success: false, error: 'Invalid or expired session key' };
+    if (error.response) {
+      console.error('[Main] Response status:', error.response.status);
+      console.error('[Main] Response headers:', JSON.stringify(error.response.headers));
+      console.error('[Main] Response data:', JSON.stringify(error.response.data).substring(0, 500));
     }
-    return { success: false, error: 'Connection failed' };
+    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+      return { success: false, error: 'Invalid or expired session key (HTTP ' + error.response.status + ')' };
+    }
+    return { success: false, error: 'Connection failed: ' + error.message };
   }
 });
 
@@ -204,7 +217,11 @@ ipcMain.handle('fetch-usage-data', async () => {
       {
         headers: {
           'Cookie': `sessionKey=${sessionKey}`,
-          'User-Agent': CHROME_USER_AGENT
+          'User-Agent': CHROME_USER_AGENT,
+          'Accept': 'application/json',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': 'https://claude.ai/',
+          'Origin': 'https://claude.ai'
         }
       }
     );
