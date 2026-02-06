@@ -23,7 +23,6 @@
     "electron-builder": "^24.9.1"
   },
   "dependencies": {
-    "better-sqlite3": "^12.6.2",
     "electron-store": "^8.1.0"
   },
   "build": {
@@ -41,9 +40,6 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     },
-    "asarUnpack": [
-      "node_modules/better-sqlite3/**"
-    ],
     "files": [
       "**/*",
       "!**/*.ts",

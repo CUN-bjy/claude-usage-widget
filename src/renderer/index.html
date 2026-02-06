@@ -40,7 +40,7 @@
                 <p>Loading usage data...</p>
             </div>
 
-            <!-- Login Step 1: Auto-detect -->
+            <!-- Login -->
             <div class="login-container" id="loginContainer" style="display: none;">
                 <div class="login-content">
                     <div class="login-step1" id="loginStep1">
@@ -95,17 +95,6 @@
                 </div>
             </div>
 
-            <!-- Auto-Login Attempt State -->
-            <div class="auto-login-container" id="autoLoginContainer" style="display: none;">
-                <div class="auto-login-content">
-                    <div class="spinner"></div>
-                    <div class="auto-login-text-group">
-                        <h3>Trying to auto-login...</h3>
-                        <p>Please wait while we reconnect</p>
-                    </div>
-                </div>
-            </div>
-
             <!-- Main Content -->
             <div class="content" id="mainContent" style="display: none;">
                 <!-- Session Usage -->
@@ -154,8 +143,6 @@
                     <div id="extraRows"></div>
                 </div>
 
-                <!-- Hidden Footer element (removed) -->
-                <span id="lastUpdate" style="display: none;"></span>
             </div>
 
             <!-- Settings Overlay -->
@@ -166,9 +153,6 @@
                         <strong>Disclaimer:</strong> Unofficial tool not affiliated with Anthropic. Use at your own
                         discretion.
                     </p>
-
-                    <button class="debug-btn" id="debugBtn">Show Raw API Response</button>
-                    <pre class="debug-output" id="debugOutput" style="display: none;"></pre>
 
                     <button class="coffee-btn" id="coffeeBtn">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"

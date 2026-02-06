@@ -13,7 +13,6 @@ const elements = {
     loadingContainer: document.getElementById('loadingContainer'),
     loginContainer: document.getElementById('loginContainer'),
     noUsageContainer: document.getElementById('noUsageContainer'),
-    autoLoginContainer: document.getElementById('autoLoginContainer'),
     mainContent: document.getElementById('mainContent'),
     loginStep1: document.getElementById('loginStep1'),
     loginStep2: document.getElementById('loginStep2'),
@@ -47,8 +46,6 @@ const elements = {
     settingsBtn: document.getElementById('settingsBtn'),
     settingsOverlay: document.getElementById('settingsOverlay'),
     closeSettingsBtn: document.getElementById('closeSettingsBtn'),
-    debugBtn: document.getElementById('debugBtn'),
-    debugOutput: document.getElementById('debugOutput'),
     logoutBtn: document.getElementById('logoutBtn'),
     coffeeBtn: document.getElementById('coffeeBtn')
 };
@@ -139,19 +136,6 @@ function setupEventListeners() {
 
     elements.coffeeBtn.addEventListener('click', () => {
         window.electronAPI.openExternal('https://paypal.me/SlavomirDurej?country.x=GB&locale.x=en_GB');
-    });
-
-    elements.debugBtn.addEventListener('click', async () => {
-        elements.debugBtn.textContent = 'Fetching...';
-        try {
-            const data = await window.electronAPI.fetchUsageData();
-            elements.debugOutput.textContent = JSON.stringify(data, null, 2);
-            elements.debugOutput.style.display = 'block';
-        } catch (error) {
-            elements.debugOutput.textContent = 'Error: ' + error.message;
-            elements.debugOutput.style.display = 'block';
-        }
-        elements.debugBtn.textContent = 'Show Raw API Response';
     });
 
     // Listen for refresh requests from tray
@@ -258,7 +242,7 @@ async function fetchUsageData() {
             credentials = { sessionKey: null, organizationId: null };
             showLoginRequired();
         } else {
-            showError('Failed to fetch usage data');
+            console.error('Failed to fetch usage data');
         }
     }
 }
@@ -530,19 +514,10 @@ function updateTimer(timerElement, textElement, resetsAt, totalMinutes) {
 }
 
 // UI State Management
-function showLoading() {
-    elements.loadingContainer.style.display = 'block';
-    elements.loginContainer.style.display = 'none';
-    elements.noUsageContainer.style.display = 'none';
-    elements.autoLoginContainer.style.display = 'none';
-    elements.mainContent.style.display = 'none';
-}
-
 function showLoginRequired() {
     elements.loadingContainer.style.display = 'none';
     elements.loginContainer.style.display = 'flex';
     elements.noUsageContainer.style.display = 'none';
-    elements.autoLoginContainer.style.display = 'none';
     elements.mainContent.style.display = 'none';
     // Reset to step 1
     elements.loginStep1.style.display = 'flex';
@@ -556,22 +531,14 @@ function showNoUsage() {
     elements.loadingContainer.style.display = 'none';
     elements.loginContainer.style.display = 'none';
     elements.noUsageContainer.style.display = 'flex';
-    elements.autoLoginContainer.style.display = 'none';
     elements.mainContent.style.display = 'none';
 }
-
 
 function showMainContent() {
     elements.loadingContainer.style.display = 'none';
     elements.loginContainer.style.display = 'none';
     elements.noUsageContainer.style.display = 'none';
-    elements.autoLoginContainer.style.display = 'none';
     elements.mainContent.style.display = 'block';
-}
-
-function showError(message) {
-    // TODO: Implement error notification
-    console.error(message);
 }
 
 // Auto-update management
