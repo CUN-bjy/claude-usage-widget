@@ -88,7 +88,7 @@ function createLoginWindow() {
   // Set User-Agent at session level to prevent Electron detection
   loginWindow.webContents.setUserAgent(CHROME_USER_AGENT);
 
-  // Block navigation to external protocols (claude://, etc.) that trigger desktop app
+  // Block navigation to dangerous protocols only (blacklist approach)
   loginWindow.webContents.on('will-navigate', (event, url) => {
     console.log('[Login] will-navigate:', url);
 
@@ -106,13 +106,9 @@ function createLoginWindow() {
       return;
     }
 
-    // Only allow https claude.ai URLs
-    if (!url.startsWith('https://claude.ai') &&
-        !url.startsWith('https://accounts.google.com') &&
-        !url.startsWith('https://appleid.apple.com') &&
-        !url.startsWith('https://www.google.com') &&
-        !url.startsWith('https://accounts.anthropic.com')) {
-      console.log('[Login] Blocking external URL:', url);
+    // Block non-https protocols (except data: for inline resources)
+    if (!url.startsWith('https://') && !url.startsWith('data:')) {
+      console.log('[Login] Blocking non-https URL:', url);
       event.preventDefault();
       return;
     }
@@ -298,7 +294,7 @@ async function attemptSilentLogin() {
     // Set User-Agent to prevent Electron detection
     silentLoginWindow.webContents.setUserAgent(CHROME_USER_AGENT);
 
-    // Block navigation to external protocols (claude://, etc.) that trigger desktop app
+    // Block navigation to dangerous protocols only (blacklist approach)
     silentLoginWindow.webContents.on('will-navigate', (event, url) => {
       console.log('[SilentLogin] will-navigate:', url);
 
@@ -308,12 +304,8 @@ async function attemptSilentLogin() {
         return;
       }
 
-      if (!url.startsWith('https://claude.ai') &&
-          !url.startsWith('https://accounts.google.com') &&
-          !url.startsWith('https://appleid.apple.com') &&
-          !url.startsWith('https://www.google.com') &&
-          !url.startsWith('https://accounts.anthropic.com')) {
-        console.log('[SilentLogin] Blocking external URL:', url);
+      if (!url.startsWith('https://') && !url.startsWith('data:')) {
+        console.log('[SilentLogin] Blocking non-https URL:', url);
         event.preventDefault();
         return;
       }
