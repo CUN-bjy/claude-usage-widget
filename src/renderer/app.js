@@ -12,7 +12,9 @@ const elements = {
     noUsageContainer: document.getElementById('noUsageContainer'),
     autoLoginContainer: document.getElementById('autoLoginContainer'),
     mainContent: document.getElementById('mainContent'),
-    loginBtn: document.getElementById('loginBtn'),
+    sessionKeyInput: document.getElementById('sessionKeyInput'),
+    connectBtn: document.getElementById('connectBtn'),
+    sessionKeyError: document.getElementById('sessionKeyError'),
     refreshBtn: document.getElementById('refreshBtn'),
     minimizeBtn: document.getElementById('minimizeBtn'),
     closeBtn: document.getElementById('closeBtn'),
@@ -50,8 +52,12 @@ async function init() {
 
 // Event Listeners
 function setupEventListeners() {
-    elements.loginBtn.addEventListener('click', () => {
-        window.electronAPI.openLogin();
+    // Manual sessionKey connect
+    elements.connectBtn.addEventListener('click', handleConnect);
+    elements.sessionKeyInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') handleConnect();
+        // Clear error on typing
+        elements.sessionKeyError.textContent = '';
     });
 
     elements.refreshBtn.addEventListener('click', async () => {
@@ -66,7 +72,7 @@ function setupEventListeners() {
     });
 
     elements.closeBtn.addEventListener('click', () => {
-        window.electronAPI.closeWindow(); // Exit application completely
+        window.electronAPI.closeWindow();
     });
 
     // Settings calls
@@ -80,24 +86,13 @@ function setupEventListeners() {
 
     elements.logoutBtn.addEventListener('click', async () => {
         await window.electronAPI.deleteCredentials();
+        credentials = { sessionKey: null, organizationId: null };
         elements.settingsOverlay.style.display = 'none';
         showLoginRequired();
-        window.electronAPI.openLogin();
     });
 
     elements.coffeeBtn.addEventListener('click', () => {
         window.electronAPI.openExternal('https://paypal.me/SlavomirDurej?country.x=GB&locale.x=en_GB');
-    });
-
-    // Listen for login success
-    window.electronAPI.onLoginSuccess(async (data) => {
-        console.log('Renderer received login-success event', data);
-        credentials = data;
-        await window.electronAPI.saveCredentials(data);
-        console.log('Credentials saved, showing main content');
-        showMainContent();
-        await fetchUsageData();
-        startAutoUpdate();
     });
 
     // Listen for refresh requests from tray
@@ -105,24 +100,44 @@ function setupEventListeners() {
         await fetchUsageData();
     });
 
-    // Listen for session expiration events (403 errors) - only used as fallback
+    // Listen for session expiration events (403 errors)
     window.electronAPI.onSessionExpired(() => {
         console.log('Session expired event received');
         credentials = { sessionKey: null, organizationId: null };
         showLoginRequired();
     });
+}
 
-    // Listen for silent login attempts
-    window.electronAPI.onSilentLoginStarted(() => {
-        console.log('Silent login started...');
-        showAutoLoginAttempt();
-    });
+// Handle manual sessionKey connect
+async function handleConnect() {
+    const sessionKey = elements.sessionKeyInput.value.trim();
+    if (!sessionKey) {
+        elements.sessionKeyError.textContent = 'Please paste your session key';
+        return;
+    }
 
-    // Listen for silent login failures (falls back to visible login)
-    window.electronAPI.onSilentLoginFailed(() => {
-        console.log('Silent login failed, manual login required');
-        showLoginRequired();
-    });
+    elements.connectBtn.disabled = true;
+    elements.connectBtn.textContent = '...';
+    elements.sessionKeyError.textContent = '';
+
+    try {
+        const result = await window.electronAPI.validateSessionKey(sessionKey);
+        if (result.success) {
+            credentials = { sessionKey, organizationId: result.organizationId };
+            await window.electronAPI.saveCredentials(credentials);
+            elements.sessionKeyInput.value = '';
+            showMainContent();
+            await fetchUsageData();
+            startAutoUpdate();
+        } else {
+            elements.sessionKeyError.textContent = result.error || 'Invalid session key';
+        }
+    } catch (error) {
+        elements.sessionKeyError.textContent = 'Connection failed. Check your key.';
+    } finally {
+        elements.connectBtn.disabled = false;
+        elements.connectBtn.textContent = 'Connect';
+    }
 }
 
 // Fetch usage data from Claude API
@@ -143,10 +158,8 @@ async function fetchUsageData() {
     } catch (error) {
         console.error('Error fetching usage data:', error);
         if (error.message.includes('SessionExpired') || error.message.includes('Unauthorized')) {
-            // Session expired - silent login attempt is in progress
-            // Show auto-login UI while waiting
             credentials = { sessionKey: null, organizationId: null };
-            showAutoLoginAttempt();
+            showLoginRequired();
         } else {
             showError('Failed to fetch usage data');
         }
@@ -359,14 +372,6 @@ function showNoUsage() {
     elements.mainContent.style.display = 'none';
 }
 
-function showAutoLoginAttempt() {
-    elements.loadingContainer.style.display = 'none';
-    elements.loginContainer.style.display = 'none';
-    elements.noUsageContainer.style.display = 'none';
-    elements.autoLoginContainer.style.display = 'flex';
-    elements.mainContent.style.display = 'none';
-    stopAutoUpdate();
-}
 
 function showMainContent() {
     elements.loadingContainer.style.display = 'none';
