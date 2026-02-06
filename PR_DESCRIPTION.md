@@ -15,10 +15,9 @@ This PR fixes the broken login flow and replaces the HTTP request layer to work 
 - This uses a real browser context that passes Cloudflare checks automatically
 - Set session-level User-Agent to Chrome to prevent Electron detection
 
-**Login flow: BrowserWindow popup login**
-- Opens a visible `BrowserWindow` to `claude.ai/login` where the user logs in directly
-- Electron's session captures the `sessionKey` cookie automatically via `cookies.on('changed')`
-- Manual sessionKey paste kept as fallback (Step 2)
+**Login flow: two options**
+- **Primary**: Opens a visible `BrowserWindow` to `claude.ai/login` where the user logs in directly. Electron's session captures the `sessionKey` cookie automatically via `cookies.on('changed')`
+- **Manual fallback**: User can paste a `sessionKey` directly from browser DevTools (F12 → Application → Cookies)
 - Removed the old silent login / auto-login mechanism entirely
 
 **Expandable widget**
