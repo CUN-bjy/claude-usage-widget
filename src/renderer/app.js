@@ -17,7 +17,9 @@ const elements = {
     mainContent: document.getElementById('mainContent'),
     loginStep1: document.getElementById('loginStep1'),
     loginStep2: document.getElementById('loginStep2'),
-    openBrowserBtn: document.getElementById('openBrowserBtn'),
+    autoDetectBtn: document.getElementById('autoDetectBtn'),
+    autoDetectError: document.getElementById('autoDetectError'),
+    openBrowserLink: document.getElementById('openBrowserLink'),
     nextStepBtn: document.getElementById('nextStepBtn'),
     backStepBtn: document.getElementById('backStepBtn'),
     sessionKeyInput: document.getElementById('sessionKeyInput'),
@@ -67,10 +69,8 @@ async function init() {
 
 // Event Listeners
 function setupEventListeners() {
-    // Step 1: Open browser
-    elements.openBrowserBtn.addEventListener('click', () => {
-        window.electronAPI.openExternal('https://claude.ai');
-    });
+    // Step 1: Auto-detect from browser
+    elements.autoDetectBtn.addEventListener('click', handleAutoDetect);
 
     // Step navigation
     elements.nextStepBtn.addEventListener('click', () => {
@@ -83,6 +83,12 @@ function setupEventListeners() {
         elements.loginStep2.style.display = 'none';
         elements.loginStep1.style.display = 'flex';
         elements.sessionKeyError.textContent = '';
+    });
+
+    // Open browser link in step 2
+    elements.openBrowserLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.electronAPI.openExternal('https://claude.ai');
     });
 
     // Step 2: Manual sessionKey connect
@@ -190,6 +196,44 @@ async function handleConnect() {
     } finally {
         elements.connectBtn.disabled = false;
         elements.connectBtn.textContent = 'Connect';
+    }
+}
+
+// Handle auto-detect from browser cookies
+async function handleAutoDetect() {
+    elements.autoDetectBtn.disabled = true;
+    elements.autoDetectBtn.textContent = 'Detecting...';
+    elements.autoDetectError.textContent = '';
+
+    try {
+        const result = await window.electronAPI.detectSessionKey();
+        if (!result.success) {
+            elements.autoDetectError.textContent = result.error || 'Not found';
+            return;
+        }
+
+        // Found a sessionKey, now validate it
+        elements.autoDetectBtn.textContent = 'Validating...';
+        const validation = await window.electronAPI.validateSessionKey(result.sessionKey);
+
+        if (validation.success) {
+            credentials = {
+                sessionKey: result.sessionKey,
+                organizationId: validation.organizationId
+            };
+            await window.electronAPI.saveCredentials(credentials);
+            showMainContent();
+            await fetchUsageData();
+            startAutoUpdate();
+        } else {
+            elements.autoDetectError.textContent =
+                `Found in ${result.browser} but session expired. Try Manual →`;
+        }
+    } catch (error) {
+        elements.autoDetectError.textContent = error.message || 'Detection failed';
+    } finally {
+        elements.autoDetectBtn.disabled = false;
+        elements.autoDetectBtn.textContent = 'Auto-detect';
     }
 }
 

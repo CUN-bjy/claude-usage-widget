@@ -40,30 +40,33 @@
                 <p>Loading usage data...</p>
             </div>
 
-            <!-- Login Step 1: Open Browser -->
+            <!-- Login Step 1: Auto-detect -->
             <div class="login-container" id="loginContainer" style="display: none;">
                 <div class="login-content">
                     <div class="login-step1" id="loginStep1">
                         <div class="step-icon">
                             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="10" />
-                                <line x1="2" y1="12" x2="22" y2="12" />
-                                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                                <circle cx="11" cy="11" r="8" />
+                                <line x1="21" y1="21" x2="16.65" y2="16.65" />
                             </svg>
                         </div>
                         <div class="step-text">
-                            <h3>Log in to Claude.ai</h3>
-                            <p>Open your browser and sign in first</p>
+                            <h3>Connect to Claude.ai</h3>
+                            <p>Detect session from Chrome / Edge</p>
+                            <p class="step-error" id="autoDetectError"></p>
                         </div>
-                        <button class="open-browser-btn" id="openBrowserBtn">Open Browser</button>
-                        <button class="next-step-btn" id="nextStepBtn">Next →</button>
+                        <button class="auto-detect-btn" id="autoDetectBtn">Auto-detect</button>
+                        <button class="next-step-btn" id="nextStepBtn">Manual →</button>
                     </div>
 
                     <div class="login-step2" id="loginStep2" style="display: none;">
                         <div class="session-key-form">
                             <div class="session-key-header">
                                 <h3>Paste your Session Key</h3>
-                                <p><code>F12</code> → Application → Cookies → claude.ai → <code>sessionKey</code></p>
+                                <p>
+                                    <a href="#" id="openBrowserLink" class="open-browser-link">Open claude.ai</a>
+                                    → <code>F12</code> → Application → Cookies → <code>sessionKey</code>
+                                </p>
                             </div>
                             <div class="session-key-input-row">
                                 <input type="password" id="sessionKeyInput" placeholder="sk-ant-sid01-..." spellcheck="false" autocomplete="off">

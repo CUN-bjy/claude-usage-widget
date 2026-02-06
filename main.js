@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, session, shell } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
+const { detectSessionKey } = require('./src/cookie-reader');
 
 const store = new Store({
   encryptionKey: 'claude-widget-secure-key-2024'
@@ -276,6 +277,16 @@ ipcMain.handle('set-window-position', (event, { x, y }) => {
 
 ipcMain.on('open-external', (event, url) => {
   shell.openExternal(url);
+});
+
+ipcMain.handle('detect-session-key', async () => {
+  try {
+    const result = await detectSessionKey();
+    return result;
+  } catch (error) {
+    console.error('[Main] Cookie auto-detect failed:', error.message);
+    return { success: false, error: error.message };
+  }
 });
 
 ipcMain.handle('fetch-usage-data', async () => {

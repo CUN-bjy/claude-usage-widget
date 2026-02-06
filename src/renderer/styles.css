@@ -134,7 +134,7 @@ body {
     width: 100%;
 }
 
-/* Step 1: Open Browser */
+/* Step 1: Auto-detect */
 .login-step1 {
     display: flex;
     align-items: center;
@@ -163,7 +163,15 @@ body {
     margin: 0;
 }
 
-.open-browser-btn {
+.step-error {
+    color: #ef4444;
+    font-size: 9px;
+    margin-top: 2px;
+    min-height: 0;
+    word-break: break-word;
+}
+
+.auto-detect-btn {
     background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
     color: white;
     border: none;
@@ -177,9 +185,26 @@ body {
     flex-shrink: 0;
 }
 
-.open-browser-btn:hover {
+.auto-detect-btn:hover {
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+.auto-detect-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.open-browser-link {
+    color: #a78bfa;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.open-browser-link:hover {
+    color: #c4b5fd;
+    text-decoration: underline;
 }
 
 .next-step-btn {

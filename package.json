@@ -18,12 +18,13 @@
   "author": "Your Name",
   "license": "MIT",
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "electron": "^28.0.0",
-    "electron-builder": "^24.9.1",
-    "cross-env": "^7.0.3"
+    "electron-builder": "^24.9.1"
   },
   "dependencies": {
-    "electron-store": "^8.1.0"
+    "electron-store": "^8.1.0",
+    "sql.js": "^1.13.0"
   },
   "build": {
     "appId": "com.claudeusage.widget",
@@ -40,6 +41,9 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     },
+    "asarUnpack": [
+      "node_modules/sql.js/dist/sql-wasm.wasm"
+    ],
     "files": [
       "**/*",
       "!**/*.ts",
