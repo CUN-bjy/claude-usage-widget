@@ -49,7 +49,7 @@ async function detectSessionKey() {
       if (!fs.existsSync(cookiePath)) continue;
 
       try {
-        const sessionKey = await readSessionKeyCookie(cookiePath, masterKey);
+        const sessionKey = readSessionKeyCookie(cookiePath, masterKey);
         if (sessionKey) {
           console.log(`[CookieReader] Found sessionKey in ${browser.name}/${profile}`);
           return {
@@ -138,47 +138,52 @@ function copyLockedFile(srcPath, destPath) {
 
 /**
  * Read the sessionKey cookie from a Chromium Cookies SQLite database.
+ * Copies main DB + WAL + SHM to temp so better-sqlite3 gets full data.
  */
-async function readSessionKeyCookie(cookiePath, masterKey) {
-  const tmpDb = path.join(os.tmpdir(), `claude_cookies_${Date.now()}.db`);
+function readSessionKeyCookie(cookiePath, masterKey) {
+  const tmpDir = path.join(os.tmpdir(), `claude_cookies_${Date.now()}`);
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  const tmpDb = path.join(tmpDir, 'Cookies');
 
   try {
-    // Copy locked DB via PowerShell shared-read FileStream
+    // Copy main DB file (always required)
     copyLockedFile(cookiePath, tmpDb);
 
-    // Load sql.js with WASM binary
-    const initSqlJs = require('sql.js');
-    const wasmPath = path.join(__dirname, '..', 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm');
-    let sqlOpts = {};
-    if (fs.existsSync(wasmPath)) {
-      sqlOpts.wasmBinary = fs.readFileSync(wasmPath);
+    // Copy WAL and SHM files if they exist (Chrome uses WAL mode;
+    // without these the main file may appear to have no tables)
+    const walSrc = cookiePath + '-wal';
+    const shmSrc = cookiePath + '-shm';
+    if (fs.existsSync(walSrc)) {
+      try { copyLockedFile(walSrc, tmpDb + '-wal'); } catch (e) { /* non-fatal */ }
     }
-    const SQL = await initSqlJs(sqlOpts);
+    if (fs.existsSync(shmSrc)) {
+      try { copyLockedFile(shmSrc, tmpDb + '-shm'); } catch (e) { /* non-fatal */ }
+    }
 
-    const dbBuffer = fs.readFileSync(tmpDb);
-    const db = new SQL.Database(dbBuffer);
+    // better-sqlite3 opens file-based DB and handles WAL automatically
+    const Database = require('better-sqlite3');
+    const db = new Database(tmpDb, { readonly: true });
 
     let sessionKey = null;
     try {
-      const stmt = db.prepare(
+      const row = db.prepare(
         "SELECT encrypted_value FROM cookies WHERE (host_key = '.claude.ai' OR host_key = 'claude.ai') AND name = 'sessionKey' LIMIT 1"
-      );
+      ).get();
 
-      if (stmt.step()) {
-        const row = stmt.get();
-        const encryptedValue = Buffer.from(row[0]);
+      if (row && row.encrypted_value) {
+        const encryptedValue = Buffer.from(row.encrypted_value);
         if (encryptedValue.length > 0) {
           sessionKey = decryptCookieValue(encryptedValue, masterKey);
         }
       }
-      stmt.free();
     } finally {
       db.close();
     }
 
     return sessionKey;
   } finally {
-    try { fs.unlinkSync(tmpDb); } catch {}
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   }
 }
 
