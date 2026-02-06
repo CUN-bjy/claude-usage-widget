@@ -12,6 +12,11 @@ const elements = {
     noUsageContainer: document.getElementById('noUsageContainer'),
     autoLoginContainer: document.getElementById('autoLoginContainer'),
     mainContent: document.getElementById('mainContent'),
+    loginStep1: document.getElementById('loginStep1'),
+    loginStep2: document.getElementById('loginStep2'),
+    openBrowserBtn: document.getElementById('openBrowserBtn'),
+    nextStepBtn: document.getElementById('nextStepBtn'),
+    backStepBtn: document.getElementById('backStepBtn'),
     sessionKeyInput: document.getElementById('sessionKeyInput'),
     connectBtn: document.getElementById('connectBtn'),
     sessionKeyError: document.getElementById('sessionKeyError'),
@@ -52,11 +57,28 @@ async function init() {
 
 // Event Listeners
 function setupEventListeners() {
-    // Manual sessionKey connect
+    // Step 1: Open browser
+    elements.openBrowserBtn.addEventListener('click', () => {
+        window.electronAPI.openExternal('https://claude.ai');
+    });
+
+    // Step navigation
+    elements.nextStepBtn.addEventListener('click', () => {
+        elements.loginStep1.style.display = 'none';
+        elements.loginStep2.style.display = 'block';
+        elements.sessionKeyInput.focus();
+    });
+
+    elements.backStepBtn.addEventListener('click', () => {
+        elements.loginStep2.style.display = 'none';
+        elements.loginStep1.style.display = 'flex';
+        elements.sessionKeyError.textContent = '';
+    });
+
+    // Step 2: Manual sessionKey connect
     elements.connectBtn.addEventListener('click', handleConnect);
     elements.sessionKeyInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') handleConnect();
-        // Clear error on typing
         elements.sessionKeyError.textContent = '';
     });
 
@@ -357,10 +379,15 @@ function showLoading() {
 
 function showLoginRequired() {
     elements.loadingContainer.style.display = 'none';
-    elements.loginContainer.style.display = 'flex'; // Use flex to preserve centering
+    elements.loginContainer.style.display = 'flex';
     elements.noUsageContainer.style.display = 'none';
     elements.autoLoginContainer.style.display = 'none';
     elements.mainContent.style.display = 'none';
+    // Reset to step 1
+    elements.loginStep1.style.display = 'flex';
+    elements.loginStep2.style.display = 'none';
+    elements.sessionKeyError.textContent = '';
+    elements.sessionKeyInput.value = '';
     stopAutoUpdate();
 }
 
