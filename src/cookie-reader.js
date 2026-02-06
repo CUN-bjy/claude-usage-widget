@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const crypto = require('crypto');
 const { execSync } = require('child_process');
 
@@ -7,17 +8,14 @@ const { execSync } = require('child_process');
 const BROWSERS = [
   {
     name: 'Chrome',
-    processName: 'chrome.exe',
     userDataPath: path.join(process.env.LOCALAPPDATA || '', 'Google', 'Chrome', 'User Data')
   },
   {
     name: 'Edge',
-    processName: 'msedge.exe',
     userDataPath: path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'Edge', 'User Data')
   },
   {
     name: 'Brave',
-    processName: 'brave.exe',
     userDataPath: path.join(process.env.LOCALAPPDATA || '', 'BraveSoftware', 'Brave-Browser', 'User Data')
   }
 ];
@@ -25,43 +23,16 @@ const BROWSERS = [
 const PROFILES = ['Default', 'Profile 1', 'Profile 2', 'Profile 3', 'Profile 4', 'Profile 5'];
 
 /**
- * Check if a Windows process is running.
- */
-function isProcessRunning(processName) {
-  try {
-    const result = execSync(
-      `tasklist /FI "IMAGENAME eq ${processName}" /NH`,
-      { encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] }
-    );
-    return result.toLowerCase().includes(processName.toLowerCase());
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Auto-detect sessionKey from installed Chromium browsers.
- * Windows only: reads Chrome/Edge cookie DB and decrypts via DPAPI.
- * Browser must be closed so the cookie DB is not locked.
+ * Windows only: copies cookie DB to temp, decrypts via DPAPI + AES-256-GCM.
  */
 function detectSessionKey() {
   if (process.platform !== 'win32') {
     throw new Error('Auto-detect is currently supported on Windows only');
   }
 
-  // Check which browsers are running
-  const runningBrowsers = BROWSERS
-    .filter(b => fs.existsSync(b.userDataPath) && isProcessRunning(b.processName))
-    .map(b => b.name);
-
-  if (runningBrowsers.length > 0) {
-    throw new Error(
-      `Close ${runningBrowsers.join(' and ')} first, then try again.\n` +
-      'The browser locks its cookie database while running.'
-    );
-  }
-
   const errors = [];
+  let hadLockError = false;
 
   for (const browser of BROWSERS) {
     if (!fs.existsSync(browser.userDataPath)) continue;
@@ -89,9 +60,20 @@ function detectSessionKey() {
           };
         }
       } catch (err) {
-        errors.push(`${browser.name}/${profile}: ${err.message}`);
+        const msg = err.message || '';
+        if (msg.includes('locked') || msg.includes('SQLITE_BUSY') || msg.includes('EBUSY')) {
+          hadLockError = true;
+        }
+        errors.push(`${browser.name}/${profile}: ${msg}`);
       }
     }
+  }
+
+  if (hadLockError) {
+    throw new Error(
+      'Browser is locking the cookie database.\n' +
+      'Fully quit your browser (also check the system tray), then try again.'
+    );
   }
 
   const detail = errors.length > 0 ? '\n' + errors.join('\n') : '';
@@ -114,13 +96,11 @@ function getMasterKey(userDataPath) {
 
   const encryptedKeyFull = Buffer.from(encryptedKeyB64, 'base64');
 
-  // Strip "DPAPI" prefix (5 bytes)
   if (encryptedKeyFull.slice(0, 5).toString('utf8') !== 'DPAPI') {
     throw new Error('Unexpected key prefix (expected DPAPI)');
   }
   const dpapiBlob = encryptedKeyFull.slice(5);
 
-  // Decrypt via PowerShell DPAPI
   const inputB64 = dpapiBlob.toString('base64');
   const psScript = [
     'Add-Type -AssemblyName System.Security;',
@@ -140,23 +120,61 @@ function getMasterKey(userDataPath) {
 
 /**
  * Read the sessionKey cookie from a Chromium Cookies SQLite database.
- * Browser must be closed so the DB file is not locked and WAL is checkpointed.
+ * Copies DB files to temp dir first to avoid lock conflicts with running browser.
  */
 function readSessionKeyCookie(cookiePath, masterKey) {
-  const Database = require('better-sqlite3');
-  const db = new Database(cookiePath, { readonly: true });
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-cookie-'));
+  const tempDbPath = path.join(tempDir, 'Cookies');
 
   try {
-    const row = db.prepare(
-      "SELECT encrypted_value FROM cookies WHERE (host_key = '.claude.ai' OR host_key = 'claude.ai') AND name = 'sessionKey' LIMIT 1"
-    ).get();
+    // Copy main DB file
+    fs.copyFileSync(cookiePath, tempDbPath);
 
-    if (row && row.encrypted_value) {
-      return decryptCookieValue(Buffer.from(row.encrypted_value), masterKey);
+    // Verify copy is not empty
+    const stat = fs.statSync(tempDbPath);
+    if (stat.size === 0) {
+      throw new Error('Cookie database copy is empty (0 bytes)');
     }
-    return null;
+
+    // Copy WAL and SHM files if they exist (needed for uncommitted data)
+    const walPath = cookiePath + '-wal';
+    const shmPath = cookiePath + '-shm';
+    if (fs.existsSync(walPath)) {
+      fs.copyFileSync(walPath, tempDbPath + '-wal');
+    }
+    if (fs.existsSync(shmPath)) {
+      fs.copyFileSync(shmPath, tempDbPath + '-shm');
+    }
+
+    // Load better-sqlite3 - may fail if native module not unpacked from asar
+    let Database;
+    try {
+      Database = require('better-sqlite3');
+    } catch (loadErr) {
+      throw new Error('Failed to load SQLite module: ' + loadErr.message);
+    }
+
+    const db = new Database(tempDbPath);
+
+    try {
+      const row = db.prepare(
+        "SELECT encrypted_value FROM cookies WHERE (host_key = '.claude.ai' OR host_key = 'claude.ai') AND name = 'sessionKey' LIMIT 1"
+      ).get();
+
+      if (row && row.encrypted_value) {
+        return decryptCookieValue(Buffer.from(row.encrypted_value), masterKey);
+      }
+      return null;
+    } finally {
+      db.close();
+    }
   } finally {
-    db.close();
+    // Clean up temp files
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch (e) {
+      // Ignore cleanup errors
+    }
   }
 }
 
@@ -170,7 +188,6 @@ function decryptCookieValue(encryptedValue, masterKey) {
     const nonce = encryptedValue.slice(3, 3 + 12);
     const ciphertextWithTag = encryptedValue.slice(3 + 12);
 
-    // Last 16 bytes are the GCM auth tag
     const tag = ciphertextWithTag.slice(ciphertextWithTag.length - 16);
     const ciphertext = ciphertextWithTag.slice(0, ciphertextWithTag.length - 16);
 

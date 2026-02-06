@@ -41,6 +41,9 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     },
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**"
+    ],
     "files": [
       "**/*",
       "!**/*.ts",
