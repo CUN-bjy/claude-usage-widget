@@ -145,15 +145,24 @@ ipcMain.handle('validate-session-key', async (event, sessionKey) => {
       headers: {
         'Cookie': `sessionKey=${sessionKey}`,
         'User-Agent': CHROME_USER_AGENT,
-        'Accept': 'application/json',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Referer': 'https://claude.ai/',
-        'Origin': 'https://claude.ai'
-      }
+        'Accept': '*/*'
+      },
+      maxRedirects: 5,
+      validateStatus: (status) => status < 500 // Don't throw on 4xx, let us inspect
     });
 
     console.log('[Main] Validate response status:', response.status);
-    console.log('[Main] Validate response data:', JSON.stringify(response.data).substring(0, 200));
+    console.log('[Main] Validate response data:', JSON.stringify(response.data).substring(0, 500));
+    console.log('[Main] Validate response headers:', JSON.stringify(response.headers));
+
+    if (response.status === 401 || response.status === 403) {
+      // Check if it's a Cloudflare challenge or actual auth failure
+      const dataStr = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+      if (dataStr.includes('cloudflare') || dataStr.includes('cf-') || dataStr.includes('challenge')) {
+        return { success: false, error: 'Blocked by Cloudflare. Try again later.' };
+      }
+      return { success: false, error: 'Invalid or expired session key (HTTP ' + response.status + ')' };
+    }
 
     if (response.data && Array.isArray(response.data) && response.data.length > 0) {
       const orgId = response.data[0].uuid || response.data[0].id;
@@ -161,16 +170,12 @@ ipcMain.handle('validate-session-key', async (event, sessionKey) => {
       return { success: true, organizationId: orgId };
     }
 
-    return { success: false, error: 'No organization found' };
+    return { success: false, error: 'No organization found. Response: ' + JSON.stringify(response.data).substring(0, 100) };
   } catch (error) {
     console.error('[Main] Session key validation failed:', error.message);
     if (error.response) {
       console.error('[Main] Response status:', error.response.status);
-      console.error('[Main] Response headers:', JSON.stringify(error.response.headers));
       console.error('[Main] Response data:', JSON.stringify(error.response.data).substring(0, 500));
-    }
-    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-      return { success: false, error: 'Invalid or expired session key (HTTP ' + error.response.status + ')' };
     }
     return { success: false, error: 'Connection failed: ' + error.message };
   }
