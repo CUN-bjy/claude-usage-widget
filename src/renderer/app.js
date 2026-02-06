@@ -37,6 +37,8 @@ const elements = {
     settingsBtn: document.getElementById('settingsBtn'),
     settingsOverlay: document.getElementById('settingsOverlay'),
     closeSettingsBtn: document.getElementById('closeSettingsBtn'),
+    debugBtn: document.getElementById('debugBtn'),
+    debugOutput: document.getElementById('debugOutput'),
     logoutBtn: document.getElementById('logoutBtn'),
     coffeeBtn: document.getElementById('coffeeBtn')
 };
@@ -115,6 +117,19 @@ function setupEventListeners() {
 
     elements.coffeeBtn.addEventListener('click', () => {
         window.electronAPI.openExternal('https://paypal.me/SlavomirDurej?country.x=GB&locale.x=en_GB');
+    });
+
+    elements.debugBtn.addEventListener('click', async () => {
+        elements.debugBtn.textContent = 'Fetching...';
+        try {
+            const data = await window.electronAPI.fetchUsageData();
+            elements.debugOutput.textContent = JSON.stringify(data, null, 2);
+            elements.debugOutput.style.display = 'block';
+        } catch (error) {
+            elements.debugOutput.textContent = 'Error: ' + error.message;
+            elements.debugOutput.style.display = 'block';
+        }
+        elements.debugBtn.textContent = 'Show Raw API Response';
     });
 
     // Listen for refresh requests from tray
