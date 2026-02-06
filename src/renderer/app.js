@@ -3,7 +3,10 @@ let credentials = null;
 let updateInterval = null;
 let countdownInterval = null;
 let latestUsageData = null;
+let isExpanded = false;
 const UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const WIDGET_HEIGHT_COLLAPSED = 140;
+const WIDGET_ROW_HEIGHT = 30;
 
 // DOM elements
 const elements = {
@@ -33,6 +36,11 @@ const elements = {
     weeklyProgress: document.getElementById('weeklyProgress'),
     weeklyTimer: document.getElementById('weeklyTimer'),
     weeklyTimeText: document.getElementById('weeklyTimeText'),
+
+    expandToggle: document.getElementById('expandToggle'),
+    expandArrow: document.getElementById('expandArrow'),
+    expandSection: document.getElementById('expandSection'),
+    extraRows: document.getElementById('extraRows'),
 
     settingsBtn: document.getElementById('settingsBtn'),
     settingsOverlay: document.getElementById('settingsOverlay'),
@@ -97,6 +105,14 @@ function setupEventListeners() {
 
     elements.closeBtn.addEventListener('click', () => {
         window.electronAPI.closeWindow();
+    });
+
+    // Expand/collapse toggle
+    elements.expandToggle.addEventListener('click', () => {
+        isExpanded = !isExpanded;
+        elements.expandArrow.classList.toggle('expanded', isExpanded);
+        elements.expandSection.style.display = isExpanded ? 'block' : 'none';
+        resizeWidget();
     });
 
     // Settings calls
@@ -215,17 +231,102 @@ function hasNoUsage(data) {
 }
 
 // Update UI with usage data
+// Extra row label mapping for API fields
+const EXTRA_ROW_CONFIG = {
+    seven_day_sonnet: { label: 'Sonnet (7d)', color: 'weekly' },
+    seven_day_opus: { label: 'Opus (7d)', color: 'opus' },
+    seven_day_cowork: { label: 'Cowork (7d)', color: 'weekly' },
+    seven_day_oauth_apps: { label: 'OAuth Apps (7d)', color: 'weekly' },
+    extra_usage: { label: 'Extra Usage', color: 'extra' },
+};
+
+function buildExtraRows(data) {
+    elements.extraRows.innerHTML = '';
+    let count = 0;
+
+    for (const [key, config] of Object.entries(EXTRA_ROW_CONFIG)) {
+        const value = data[key];
+        if (!value || value.utilization === undefined) continue;
+
+        const utilization = value.utilization || 0;
+        const resetsAt = value.resets_at;
+        const colorClass = config.color;
+
+        const row = document.createElement('div');
+        row.className = 'usage-section';
+        row.innerHTML = `
+            <span class="usage-label">${config.label}</span>
+            <div class="progress-bar">
+                <div class="progress-fill ${colorClass}" style="width: ${Math.min(utilization, 100)}%"></div>
+            </div>
+            <span class="usage-percentage">${Math.round(utilization)}%</span>
+            <div class="timer-container">
+                <div class="timer-text" data-resets="${resetsAt || ''}" data-total="${key.includes('seven_day') ? 7 * 24 * 60 : 5 * 60}">--:--</div>
+                <svg class="mini-timer" width="24" height="24" viewBox="0 0 24 24">
+                    <circle class="timer-bg" cx="12" cy="12" r="10" />
+                    <circle class="timer-progress ${colorClass}" cx="12" cy="12" r="10"
+                        style="stroke-dasharray: 63; stroke-dashoffset: 63" />
+                </svg>
+            </div>
+        `;
+
+        // Apply warning/danger classes
+        const progressEl = row.querySelector('.progress-fill');
+        if (utilization >= 90) progressEl.classList.add('danger');
+        else if (utilization >= 75) progressEl.classList.add('warning');
+
+        elements.extraRows.appendChild(row);
+        count++;
+    }
+
+    // Hide toggle if no extra rows
+    elements.expandToggle.style.display = count > 0 ? 'flex' : 'none';
+    if (count === 0 && isExpanded) {
+        isExpanded = false;
+        elements.expandArrow.classList.remove('expanded');
+        elements.expandSection.style.display = 'none';
+    }
+
+    return count;
+}
+
+function refreshExtraTimers() {
+    const timerTexts = elements.extraRows.querySelectorAll('.timer-text');
+    const timerCircles = elements.extraRows.querySelectorAll('.timer-progress');
+
+    timerTexts.forEach((textEl, i) => {
+        const resetsAt = textEl.dataset.resets;
+        const totalMinutes = parseInt(textEl.dataset.total);
+        const circleEl = timerCircles[i];
+        if (resetsAt && circleEl) {
+            updateTimer(circleEl, textEl, resetsAt, totalMinutes);
+        }
+    });
+}
+
+function resizeWidget() {
+    const extraCount = elements.extraRows.children.length;
+    if (isExpanded && extraCount > 0) {
+        const expandedHeight = WIDGET_HEIGHT_COLLAPSED + 12 + (extraCount * WIDGET_ROW_HEIGHT);
+        window.electronAPI.resizeWindow(expandedHeight);
+    } else {
+        window.electronAPI.resizeWindow(WIDGET_HEIGHT_COLLAPSED);
+    }
+}
+
 function updateUI(data) {
     latestUsageData = data;
 
-    // Check if there's no usage data
     if (hasNoUsage(data)) {
         showNoUsage();
         return;
     }
 
     showMainContent();
+    buildExtraRows(data);
     refreshTimers();
+    if (isExpanded) refreshExtraTimers();
+    resizeWidget();
     startCountdown();
 }
 
@@ -305,6 +406,7 @@ function startCountdown() {
     if (countdownInterval) clearInterval(countdownInterval);
     countdownInterval = setInterval(() => {
         refreshTimers();
+        if (isExpanded) refreshExtraTimers();
     }, 1000);
 }
 

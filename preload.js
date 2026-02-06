@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Window controls
   minimizeWindow: () => ipcRenderer.send('minimize-window'),
   closeWindow: () => ipcRenderer.send('close-window'),
+  resizeWindow: (height) => ipcRenderer.send('resize-window', height),
 
   // Window position
   getWindowPosition: () => ipcRenderer.invoke('get-window-position'),

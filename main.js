@@ -253,6 +253,12 @@ ipcMain.on('close-window', () => {
   app.quit();
 });
 
+ipcMain.on('resize-window', (event, height) => {
+  if (mainWindow) {
+    mainWindow.setSize(WIDGET_WIDTH, height);
+  }
+});
+
 ipcMain.handle('get-window-position', () => {
   if (mainWindow) {
     return mainWindow.getBounds();
