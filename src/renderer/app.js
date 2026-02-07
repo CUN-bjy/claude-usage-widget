@@ -8,6 +8,13 @@ const UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const WIDGET_HEIGHT_COLLAPSED = 140;
 const WIDGET_ROW_HEIGHT = 30;
 
+// Debug logging — only shows in DevTools (development mode).
+// Regular users won't see verbose logs in production.
+const DEBUG = (new URLSearchParams(window.location.search)).has('debug');
+function debugLog(...args) {
+  if (DEBUG) console.log('[Debug]', ...args);
+}
+
 // DOM elements
 const elements = {
     loadingContainer: document.getElementById('loadingContainer'),
@@ -96,7 +103,7 @@ function setupEventListeners() {
     });
 
     elements.refreshBtn.addEventListener('click', async () => {
-        console.log('Refresh button clicked');
+        debugLog('Refresh button clicked');
         elements.refreshBtn.classList.add('spinning');
         await fetchUsageData();
         elements.refreshBtn.classList.remove('spinning');
@@ -145,7 +152,7 @@ function setupEventListeners() {
 
     // Listen for session expiration events (403 errors)
     window.electronAPI.onSessionExpired(() => {
-        console.log('Session expired event received');
+        debugLog('Session expired event received');
         credentials = { sessionKey: null, organizationId: null };
         showLoginRequired();
     });
@@ -223,18 +230,18 @@ async function handleAutoDetect() {
 
 // Fetch usage data from Claude API
 async function fetchUsageData() {
-    console.log('fetchUsageData called', { credentials });
+    debugLog('fetchUsageData called');
 
     if (!credentials.sessionKey || !credentials.organizationId) {
-        console.log('Missing credentials, showing login');
+        debugLog('Missing credentials, showing login');
         showLoginRequired();
         return;
     }
 
     try {
-        console.log('Calling electronAPI.fetchUsageData...');
+        debugLog('Calling electronAPI.fetchUsageData...');
         const data = await window.electronAPI.fetchUsageData();
-        console.log('Received usage data:', data);
+        debugLog('Received usage data:', data);
         updateUI(data);
     } catch (error) {
         console.error('Error fetching usage data:', error);
@@ -242,7 +249,7 @@ async function fetchUsageData() {
             credentials = { sessionKey: null, organizationId: null };
             showLoginRequired();
         } else {
-            console.error('Failed to fetch usage data');
+            debugLog('Failed to fetch usage data');
         }
     }
 }
@@ -374,7 +381,7 @@ function refreshTimers() {
         const sessionDiff = new Date(sessionResetsAt) - new Date();
         if (sessionDiff <= 0 && !sessionResetTriggered) {
             sessionResetTriggered = true;
-            console.log('Session timer expired, triggering refresh...');
+            debugLog('Session timer expired, triggering refresh...');
             // Wait a few seconds for the server to update, then refresh
             setTimeout(() => {
                 fetchUsageData();
@@ -406,7 +413,7 @@ function refreshTimers() {
         const weeklyDiff = new Date(weeklyResetsAt) - new Date();
         if (weeklyDiff <= 0 && !weeklyResetTriggered) {
             weeklyResetTriggered = true;
-            console.log('Weekly timer expired, triggering refresh...');
+            debugLog('Weekly timer expired, triggering refresh...');
             setTimeout(() => {
                 fetchUsageData();
             }, 3000);
