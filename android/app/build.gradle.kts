@@ -21,21 +21,14 @@ android {
 
     signingConfigs {
         create("release") {
-            // CI: use environment variables from GitHub Secrets
-            // Local: falls back to debug signing for convenience
             val ksFile = System.getenv("KEYSTORE_FILE")
             if (ksFile != null && file(ksFile).exists()) {
                 storeFile = file(ksFile)
                 storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
                 keyAlias = System.getenv("KEY_ALIAS") ?: ""
                 keyPassword = System.getenv("KEY_PASSWORD") ?: ""
-            } else {
-                // Use debug keystore for unsigned/local builds
-                storeFile = file(System.getProperty("user.home") + "/.android/debug.keystore")
-                storePassword = "android"
-                keyAlias = "androiddebugkey"
-                keyPassword = "android"
             }
+            // When no keystore env vars, release build falls back to debug signing config
         }
     }
 
@@ -43,7 +36,12 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("release")
+            val ksFile = System.getenv("KEYSTORE_FILE")
+            signingConfig = if (ksFile != null && file(ksFile).exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
