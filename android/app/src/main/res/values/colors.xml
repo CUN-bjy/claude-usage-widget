@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="claude_purple">#FF6B4FBB</color>
+    <color name="claude_purple_dark">#FF4B2F9B</color>
+    <color name="dark_background">#FF0D0D0D</color>
+    <color name="dark_surface">#FF1A1A2E</color>
+    <color name="text_primary">#FFE8E6F0</color>
+    <color name="text_secondary">#FFA09BB0</color>
+</resources>
