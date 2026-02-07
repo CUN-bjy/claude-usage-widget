@@ -1,19 +1,27 @@
 package com.claudeusage.widget.widget
 
 import android.content.Context
-import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.glance.*
+import androidx.glance.GlanceId
+import androidx.glance.GlanceModifier
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
-import androidx.glance.appwidget.appWidgetBackground
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
-import androidx.glance.layout.*
+import androidx.glance.background
+import androidx.glance.layout.Alignment
+import androidx.glance.layout.Box
+import androidx.glance.layout.Column
+import androidx.glance.layout.Row
+import androidx.glance.layout.Spacer
+import androidx.glance.layout.fillMaxSize
+import androidx.glance.layout.fillMaxWidth
+import androidx.glance.layout.height
+import androidx.glance.layout.padding
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
@@ -46,19 +54,19 @@ class UsageAppWidget : GlanceAppWidget() {
             WidgetContent(usageData)
         }
     }
-
-    fun updateAll(context: Context) {
-        // Widget update will be triggered by WorkManager
-    }
 }
+
+private val BgDark = ColorProvider(Color(0xFF0D0D0D))
+private val BgTrack = ColorProvider(Color(0xFF2A2A40))
+private val TextLight = ColorProvider(Color(0xFFE8E6F0))
+private val TextDim = ColorProvider(Color(0xFFA09BB0))
 
 @Composable
 private fun WidgetContent(usageData: UsageData?) {
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
-            .appWidgetBackground()
-            .background(Color(0xFF0D0D0D))
+            .background(BgDark)
             .cornerRadius(16.dp)
             .clickable(actionStartActivity<MainActivity>())
             .padding(12.dp)
@@ -81,7 +89,7 @@ private fun NoDataContent() {
         Text(
             text = "Claude Usage",
             style = TextStyle(
-                color = ColorProvider(Color(0xFFE8E6F0)),
+                color = TextLight,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -90,7 +98,7 @@ private fun NoDataContent() {
         Text(
             text = "Tap to sign in",
             style = TextStyle(
-                color = ColorProvider(Color(0xFFA09BB0)),
+                color = TextDim,
                 fontSize = 12.sp
             )
         )
@@ -102,11 +110,10 @@ private fun UsageDataContent(data: UsageData) {
     Column(
         modifier = GlanceModifier.fillMaxSize()
     ) {
-        // Header
         Text(
             text = "Claude Usage",
             style = TextStyle(
-                color = ColorProvider(Color(0xFFE8E6F0)),
+                color = TextLight,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -114,32 +121,24 @@ private fun UsageDataContent(data: UsageData) {
 
         Spacer(modifier = GlanceModifier.height(8.dp))
 
-        // 5-hour usage
         if (data.fiveHour != null) {
             WidgetUsageRow(
                 label = "Session",
                 utilization = data.fiveHour.utilization
             )
             Spacer(modifier = GlanceModifier.height(4.dp))
-            WidgetProgressBar(
-                progress = (data.fiveHour.utilization / 100.0).toFloat(),
-                color = getStatusColor(data.fiveHour.utilization)
-            )
+            WidgetProgressBar(utilization = data.fiveHour.utilization)
         }
 
         Spacer(modifier = GlanceModifier.height(8.dp))
 
-        // 7-day usage
         if (data.sevenDay != null) {
             WidgetUsageRow(
                 label = "Weekly",
                 utilization = data.sevenDay.utilization
             )
             Spacer(modifier = GlanceModifier.height(4.dp))
-            WidgetProgressBar(
-                progress = (data.sevenDay.utilization / 100.0).toFloat(),
-                color = getStatusColor(data.sevenDay.utilization)
-            )
+            WidgetProgressBar(utilization = data.sevenDay.utilization)
         }
     }
 }
@@ -148,13 +147,12 @@ private fun UsageDataContent(data: UsageData) {
 private fun WidgetUsageRow(label: String, utilization: Double) {
     Row(
         modifier = GlanceModifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.Start,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = label,
             style = TextStyle(
-                color = ColorProvider(Color(0xFFA09BB0)),
+                color = TextDim,
                 fontSize = 11.sp
             )
         )
@@ -171,22 +169,22 @@ private fun WidgetUsageRow(label: String, utilization: Double) {
 }
 
 @Composable
-private fun WidgetProgressBar(progress: Float, color: Color) {
+private fun WidgetProgressBar(utilization: Double) {
+    val statusColor = getStatusColor(utilization)
+    val alpha = (utilization / 100.0).toFloat().coerceIn(0.15f, 1f)
     Box(
         modifier = GlanceModifier
             .fillMaxWidth()
             .height(6.dp)
             .cornerRadius(3.dp)
-            .background(Color(0xFF2A2A40))
+            .background(BgTrack)
     ) {
-        val clampedProgress = progress.coerceIn(0f, 1f)
-        // Glance doesn't support fractional width easily, so we use a simple approach
         Box(
             modifier = GlanceModifier
                 .fillMaxWidth()
                 .height(6.dp)
                 .cornerRadius(3.dp)
-                .background(color.copy(alpha = clampedProgress))
+                .background(ColorProvider(statusColor.copy(alpha = alpha)))
         ) {}
     }
 }
