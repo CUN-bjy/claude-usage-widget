@@ -1,9 +1,18 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, session, shell } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
+const { fetchViaWindow } = require('./src/fetch-via-window');
+
 const store = new Store({
   encryptionKey: 'claude-widget-secure-key-2024'
 });
+
+// Debug mode: set DEBUG_LOG=1 env var or pass --debug flag to see verbose logs.
+// Regular users will only see critical errors in the console.
+const DEBUG = process.env.DEBUG_LOG === '1' || process.argv.includes('--debug');
+function debugLog(...args) {
+  if (DEBUG) console.log('[Debug]', ...args);
+}
 
 const CHROME_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
@@ -18,56 +27,6 @@ app.on('ready', () => {
   session.defaultSession.setUserAgent(CHROME_USER_AGENT);
 });
 
-// Fetch a JSON API endpoint using a hidden BrowserWindow (bypasses Cloudflare)
-function fetchViaWindow(url) {
-  return new Promise((resolve, reject) => {
-    const win = new BrowserWindow({
-      width: 800,
-      height: 600,
-      show: false,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true
-      }
-    });
-
-    const timeout = setTimeout(() => {
-      win.close();
-      reject(new Error('Request timeout'));
-    }, 30000);
-
-    win.webContents.on('did-finish-load', async () => {
-      try {
-        // Extract the text content of the page (API returns JSON as text)
-        const bodyText = await win.webContents.executeJavaScript(
-          'document.body.innerText || document.body.textContent'
-        );
-        clearTimeout(timeout);
-        win.close();
-
-        try {
-          const data = JSON.parse(bodyText);
-          resolve(data);
-        } catch (parseErr) {
-          reject(new Error('Invalid JSON: ' + bodyText.substring(0, 200)));
-        }
-      } catch (err) {
-        clearTimeout(timeout);
-        win.close();
-        reject(err);
-      }
-    });
-
-    win.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-      clearTimeout(timeout);
-      win.close();
-      reject(new Error(`Load failed: ${errorCode} ${errorDescription}`));
-    });
-
-    win.loadURL(url);
-  });
-}
-
 // Set sessionKey as a cookie in Electron's session
 async function setSessionCookie(sessionKey) {
   await session.defaultSession.cookies.set({
@@ -79,7 +38,7 @@ async function setSessionCookie(sessionKey) {
     secure: true,
     httpOnly: true
   });
-  console.log('[Main] sessionKey cookie set in Electron session');
+  debugLog('sessionKey cookie set in Electron session');
 }
 
 function createMainWindow() {
@@ -154,11 +113,15 @@ function createTray() {
         click: async () => {
           store.delete('sessionKey');
           store.delete('organizationId');
-          // Clear session cookies
+          // Clear all Claude.ai cookies and session storage
           const cookies = await session.defaultSession.cookies.get({ url: 'https://claude.ai' });
           for (const cookie of cookies) {
             await session.defaultSession.cookies.remove('https://claude.ai', cookie.name);
           }
+          await session.defaultSession.clearStorageData({
+            storages: ['localstorage', 'sessionstorage', 'cachestorage'],
+            origin: 'https://claude.ai'
+          });
           if (mainWindow) {
             mainWindow.webContents.send('session-expired');
           }
@@ -207,16 +170,23 @@ ipcMain.handle('save-credentials', async (event, { sessionKey, organizationId })
 ipcMain.handle('delete-credentials', async () => {
   store.delete('sessionKey');
   store.delete('organizationId');
+  // Remove all Claude.ai cookies
   const cookies = await session.defaultSession.cookies.get({ url: 'https://claude.ai' });
   for (const cookie of cookies) {
     await session.defaultSession.cookies.remove('https://claude.ai', cookie.name);
   }
+  // Clear any cached data from the Electron session (storage, cache)
+  // so nothing lingers on shared machines
+  await session.defaultSession.clearStorageData({
+    storages: ['localstorage', 'sessionstorage', 'cachestorage'],
+    origin: 'https://claude.ai'
+  });
   return true;
 });
 
 // Validate a sessionKey by fetching org ID via hidden BrowserWindow
 ipcMain.handle('validate-session-key', async (event, sessionKey) => {
-  console.log('[Main] Validating session key:', sessionKey.substring(0, 20) + '...');
+  debugLog('Validating session key:', sessionKey.substring(0, 20) + '...');
   try {
     // Set the cookie in Electron's session first
     await setSessionCookie(sessionKey);
@@ -226,7 +196,7 @@ ipcMain.handle('validate-session-key', async (event, sessionKey) => {
 
     if (data && Array.isArray(data) && data.length > 0) {
       const orgId = data[0].uuid || data[0].id;
-      console.log('[Main] Session key validated, org ID:', orgId);
+      debugLog('Session key validated, org ID:', orgId);
       return { success: true, organizationId: orgId };
     }
 
@@ -235,9 +205,9 @@ ipcMain.handle('validate-session-key', async (event, sessionKey) => {
       return { success: false, error: data.error.message || data.error };
     }
 
-    return { success: false, error: 'No organization found. Response: ' + JSON.stringify(data).substring(0, 100) };
+    return { success: false, error: 'No organization found' };
   } catch (error) {
-    console.error('[Main] Session key validation failed:', error.message);
+    console.error('Session key validation failed:', error.message);
     // Clean up the invalid cookie
     await session.defaultSession.cookies.remove('https://claude.ai', 'sessionKey');
     return { success: false, error: error.message };
@@ -277,6 +247,14 @@ ipcMain.on('open-external', (event, url) => {
   shell.openExternal(url);
 });
 
+// Open a visible BrowserWindow for the user to log in to Claude.ai.
+//
+// Why we don't embed login directly in the app:
+// Claude.ai (via Cloudflare) detects and blocks Electron-embedded logins.
+// Instead, we open a standalone browser window, let the user authenticate
+// normally, then capture the sessionKey cookie once login completes.
+// Do NOT attempt to "fix" this back to an embedded login without verifying
+// that Claude.ai/Cloudflare no longer blocks it.
 ipcMain.handle('detect-session-key', async () => {
   // Clear any leftover sessionKey cookie
   try {
@@ -341,10 +319,12 @@ ipcMain.handle('fetch-usage-data', async () => {
     );
     return data;
   } catch (error) {
-    console.error('[Main] API request failed:', error.message);
-    // Check if the error indicates auth failure
-    if (error.message.includes('Invalid JSON') && error.message.includes('Just a moment')) {
-      // Cloudflare blocked - session may be expired
+    debugLog('API request failed:', error.message);
+    // Detect Cloudflare blocks or auth failures and trigger re-login
+    const isBlocked = error.message.startsWith('CloudflareBlocked')
+      || error.message.startsWith('CloudflareChallenge')
+      || error.message.startsWith('UnexpectedHTML');
+    if (isBlocked) {
       store.delete('sessionKey');
       store.delete('organizationId');
       if (mainWindow) {

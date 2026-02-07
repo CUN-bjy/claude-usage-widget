@@ -133,6 +133,18 @@ npm install
 - No data is sent to any third-party servers
 - The widget only communicates with Claude.ai official API
 - Session cookies are stored using Electron's secure storage
+- **Logout** completely removes the session key from encrypted storage, clears all Claude.ai cookies, and wipes Electron session storage (localStorage, sessionStorage, cacheStorage) so nothing lingers on shared machines
+
+### Session Key Storage Details
+
+The `sessionKey` (a bearer token for Claude.ai) is stored in two places:
+
+| Location | Purpose | Cleared on logout? |
+|---|---|---|
+| `%APPDATA%/claude-usage-widget/config.json` (encrypted via `electron-store`) | Persists credentials between app restarts | Yes |
+| Electron in-memory session cookie (`.claude.ai` domain, `secure`, `httpOnly`) | Used by hidden BrowserWindow for API requests | Yes |
+
+The encryption key is embedded in the application. This protects against casual file inspection but not against a determined attacker with access to the source code. For shared machines, always log out when finished.
 
 ## Technical Details
 
@@ -150,6 +162,17 @@ https://claude.ai/api/organizations/{org_id}/usage
 **Storage Location:**
 ```
 %APPDATA%/claude-usage-widget/config.json (encrypted)
+```
+
+**Debug Mode:**
+
+To enable verbose logging, run with the `--debug` flag or set the `DEBUG_LOG=1` environment variable:
+```bash
+# Via flag
+electron . --debug
+
+# Via env var
+DEBUG_LOG=1 npm start
 ```
 
 ## Roadmap

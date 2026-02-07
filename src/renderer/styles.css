@@ -163,6 +163,13 @@ body {
     margin: 0;
 }
 
+.step-hint {
+    color: #707070;
+    font-size: 9px;
+    margin-top: 2px;
+    font-style: italic;
+}
+
 .step-error {
     color: #ef4444;
     font-size: 9px;
