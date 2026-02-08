@@ -326,11 +326,11 @@ private fun UsageContent(
             )
         }
 
-        // Debug: API response keys
-        if (data.rawKeys.isNotEmpty()) {
+        // Debug: API response info
+        if (data.debugInfo.isNotEmpty()) {
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = "API keys: ${data.rawKeys.joinToString(", ")}",
+                text = data.debugInfo,
                 color = TextMuted.copy(alpha = 0.5f),
                 fontSize = 9.sp,
                 modifier = Modifier.fillMaxWidth(),
