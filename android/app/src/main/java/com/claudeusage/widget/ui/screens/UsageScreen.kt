@@ -326,6 +326,18 @@ private fun UsageContent(
             )
         }
 
+        // Debug: API response keys
+        if (data.rawKeys.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "API keys: ${data.rawKeys.joinToString(", ")}",
+                color = TextMuted.copy(alpha = 0.5f),
+                fontSize = 9.sp,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
     }
 }

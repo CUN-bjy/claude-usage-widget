@@ -52,7 +52,8 @@ data class UsageData(
     val sevenDayCowork: UsageMetric?,
     val sevenDayOauthApps: UsageMetric?,
     val extraUsage: UsageMetric?,
-    val fetchedAt: Instant = Instant.now()
+    val fetchedAt: Instant = Instant.now(),
+    val rawKeys: List<String> = emptyList()
 ) {
     val extraMetrics: List<Pair<String, UsageMetric>>
         get() = listOfNotNull(
@@ -65,6 +66,7 @@ data class UsageData(
 
     companion object {
         fun fromJson(json: JSONObject): UsageData {
+            val keys = json.keys().asSequence().toList()
             return UsageData(
                 fiveHour = UsageMetric.fromJson(json.optJSONObject("five_hour")),
                 sevenDay = UsageMetric.fromJson(json.optJSONObject("seven_day")),
@@ -72,7 +74,8 @@ data class UsageData(
                 sevenDayOpus = UsageMetric.fromJson(json.optJSONObject("seven_day_opus")),
                 sevenDayCowork = UsageMetric.fromJson(json.optJSONObject("seven_day_cowork")),
                 sevenDayOauthApps = UsageMetric.fromJson(json.optJSONObject("seven_day_oauth_apps")),
-                extraUsage = UsageMetric.fromJson(json.optJSONObject("extra_usage"))
+                extraUsage = UsageMetric.fromJson(json.optJSONObject("extra_usage")),
+                rawKeys = keys
             )
         }
     }
