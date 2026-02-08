@@ -44,6 +44,12 @@ enum class StatusLevel {
     NORMAL, WARNING, CRITICAL
 }
 
+data class ExtraUsageInfo(
+    val usedCents: Int? = null,
+    val limitCents: Int? = null,
+    val balanceCents: Int? = null
+)
+
 data class UsageData(
     val fiveHour: UsageMetric?,
     val sevenDay: UsageMetric?,
@@ -52,9 +58,9 @@ data class UsageData(
     val sevenDayCowork: UsageMetric?,
     val sevenDayOauthApps: UsageMetric?,
     val extraUsage: UsageMetric?,
+    val extraUsageInfo: ExtraUsageInfo? = null,
     val fetchedAt: Instant = Instant.now(),
-    val rawKeys: List<String> = emptyList(),
-    val debugInfo: String = ""
+    val rawKeys: List<String> = emptyList()
 ) {
     val extraMetrics: List<Pair<String, UsageMetric>>
         get() {
@@ -71,17 +77,6 @@ data class UsageData(
     companion object {
         fun fromJson(json: JSONObject): UsageData {
             val keys = json.keys().asSequence().toList()
-            val extraKeys = listOf("seven_day_sonnet", "seven_day_opus", "seven_day_cowork",
-                "seven_day_oauth_apps", "extra_usage")
-            val debug = extraKeys.joinToString(" | ") { key ->
-                val raw = json.opt(key)
-                val type = when {
-                    raw == null || raw == JSONObject.NULL -> "null"
-                    raw is JSONObject -> "obj(u=${raw.optDouble("utilization", -1.0)})"
-                    else -> raw.javaClass.simpleName + "=" + raw.toString().take(30)
-                }
-                "$key:$type"
-            }
             return UsageData(
                 fiveHour = UsageMetric.fromJson(json.optJSONObject("five_hour")),
                 sevenDay = UsageMetric.fromJson(json.optJSONObject("seven_day")),
@@ -90,8 +85,7 @@ data class UsageData(
                 sevenDayCowork = UsageMetric.fromJson(json.optJSONObject("seven_day_cowork")),
                 sevenDayOauthApps = UsageMetric.fromJson(json.optJSONObject("seven_day_oauth_apps")),
                 extraUsage = UsageMetric.fromJson(json.optJSONObject("extra_usage")),
-                rawKeys = keys,
-                debugInfo = debug
+                rawKeys = keys
             )
         }
     }

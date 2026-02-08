@@ -1,6 +1,9 @@
 package com.claudeusage.widget.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -16,10 +19,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.claudeusage.widget.data.model.ExtraUsageInfo
 import com.claudeusage.widget.data.model.UsageData
 import com.claudeusage.widget.ui.components.UsageProgressBar
 import com.claudeusage.widget.ui.theme.*
@@ -308,7 +315,15 @@ private fun UsageContent(
             Spacer(modifier = Modifier.height(16.dp))
             filteredMetrics.forEach { (label, metric) ->
                 Spacer(modifier = Modifier.height(8.dp))
-                MiniUsageCard(label = label, metric = metric)
+                if (label == "Extra Usage") {
+                    MiniUsageCard(
+                        label = label,
+                        metric = metric,
+                        extraUsageInfo = data.extraUsageInfo
+                    )
+                } else {
+                    MiniUsageCard(label = label, metric = metric)
+                }
             }
         }
 
@@ -379,21 +394,119 @@ private fun UsageCard(
 private fun MiniUsageCard(
     label: String,
     metric: com.claudeusage.widget.data.model.UsageMetric,
-    totalWindowHours: Double = 168.0
+    totalWindowHours: Double = 168.0,
+    extraUsageInfo: ExtraUsageInfo? = null
 ) {
+    val isExtra = extraUsageInfo != null
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = DarkCard.copy(alpha = 0.7f)),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            UsageProgressBar(
-                label = label,
-                utilization = metric.utilization,
-                statusLevel = metric.statusLevel,
-                remainingDuration = metric.remainingDuration,
-                totalWindowHours = totalWindowHours
+            if (isExtra) {
+                ExtraUsageBar(
+                    label = label,
+                    utilization = metric.utilization,
+                    info = extraUsageInfo!!
+                )
+            } else {
+                UsageProgressBar(
+                    label = label,
+                    utilization = metric.utilization,
+                    statusLevel = metric.statusLevel,
+                    remainingDuration = metric.remainingDuration,
+                    totalWindowHours = totalWindowHours
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExtraUsageBar(
+    label: String,
+    utilization: Double,
+    info: ExtraUsageInfo
+) {
+    val barColor = StatusExtra
+    val gradient = Brush.horizontalGradient(
+        colors = listOf(StatusExtra, StatusExtraLight)
+    )
+    val animatedProgress by animateFloatAsState(
+        targetValue = (utilization / 100.0).toFloat().coerceIn(0f, 1f),
+        animationSpec = tween(durationMillis = 800),
+        label = "extra_progress"
+    )
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                color = TextSecondary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium
             )
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Prepaid balance
+                if (info.balanceCents != null) {
+                    Text(
+                        text = "Bal \$${info.balanceCents / 100}",
+                        color = StatusExtraLight,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                }
+                // Spending or percentage
+                if (info.usedCents != null && info.limitCents != null) {
+                    Text(
+                        text = "\$${info.usedCents / 100}/\$${info.limitCents / 100}",
+                        color = barColor,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                } else {
+                    Text(
+                        text = "${String.format("%.1f", utilization)}%",
+                        color = barColor,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // Progress bar
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(10.dp)
+                .clip(RoundedCornerShape(5.dp))
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val cr = CornerRadius(5.dp.toPx())
+
+                drawRoundRect(
+                    color = ProgressTrack,
+                    cornerRadius = cr
+                )
+
+                if (animatedProgress > 0f) {
+                    drawRoundRect(
+                        brush = gradient,
+                        size = Size(size.width * animatedProgress, size.height),
+                        cornerRadius = cr
+                    )
+                }
+            }
         }
     }
 }

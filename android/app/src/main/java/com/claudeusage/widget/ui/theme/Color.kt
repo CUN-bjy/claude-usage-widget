@@ -24,5 +24,10 @@ val TextPrimary = Color(0xFFE8E6F0)
 val TextSecondary = Color(0xFFA09BB0)
 val TextMuted = Color(0xFF6B6680)
 
+// Extra usage / Opus colors
+val StatusExtra = Color(0xFF10B981)
+val StatusExtraLight = Color(0xFF34D399)
+val StatusOpus = Color(0xFFF59E0B)
+
 // Progress bar backgrounds
 val ProgressTrack = Color(0xFF2A2A40)
