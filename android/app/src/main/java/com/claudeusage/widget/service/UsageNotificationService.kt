@@ -114,7 +114,6 @@ class UsageNotificationService : Service() {
             .setOngoing(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setForegroundServiceType(android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
 
         if (progress >= 0) {
             builder.setProgress(100, progress, false)
