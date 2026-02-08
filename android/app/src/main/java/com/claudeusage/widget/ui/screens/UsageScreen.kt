@@ -20,8 +20,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -124,21 +128,58 @@ fun UsageScreen(
 @Composable
 private fun LoadingContent() {
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(DarkBackground),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator(
-                color = ClaudePurple,
-                strokeWidth = 3.dp
+        // Ring logo from the app icon
+        val ringSize = 180.dp
+        val ringColor = ClaudePurple
+        val ringColorLight = ClaudePurpleLight
+        val gapColor = Color.White
+
+        Canvas(modifier = Modifier.size(ringSize)) {
+            val canvasSize = size.minDimension
+            val c = Offset(canvasSize / 2, canvasSize / 2)
+            val outerRadius = canvasSize * 0.45f
+            val sw = canvasSize * 0.13f
+            val midRadius = outerRadius - sw / 2
+            val arcRect = Size(midRadius * 2, midRadius * 2)
+            val arcTopLeft = Offset(c.x - midRadius, c.y - midRadius)
+
+            // Purple ring arc (main portion ~75%)
+            drawArc(
+                color = ringColor,
+                startAngle = 290f,
+                sweepAngle = 270f,
+                useCenter = false,
+                style = Stroke(width = sw, cap = StrokeCap.Butt),
+                topLeft = arcTopLeft,
+                size = arcRect
             )
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "Loading usage data...",
-                color = TextSecondary,
-                fontSize = 14.sp
+
+            // White gap arc (~25%)
+            drawArc(
+                color = gapColor,
+                startAngle = 200f,
+                sweepAngle = 90f,
+                useCenter = false,
+                style = Stroke(width = sw, cap = StrokeCap.Butt),
+                topLeft = arcTopLeft,
+                size = arcRect
             )
         }
+
+        // Small 4-point star at bottom-right
+        Text(
+            text = "\u2726",
+            color = TextMuted,
+            fontSize = 16.sp,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(24.dp)
+        )
     }
 }
 
