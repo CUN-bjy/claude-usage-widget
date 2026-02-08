@@ -13,8 +13,33 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_NOTIFICATION_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_NOTIFICATION_ENABLED, value).apply()
 
+    var showSonnet: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_SONNET, true)
+        set(value) = prefs.edit().putBoolean(KEY_SHOW_SONNET, value).apply()
+
+    var showOpus: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_OPUS, true)
+        set(value) = prefs.edit().putBoolean(KEY_SHOW_OPUS, value).apply()
+
+    var showCowork: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_COWORK, true)
+        set(value) = prefs.edit().putBoolean(KEY_SHOW_COWORK, value).apply()
+
+    var showOauthApps: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_OAUTH_APPS, true)
+        set(value) = prefs.edit().putBoolean(KEY_SHOW_OAUTH_APPS, value).apply()
+
+    var showExtraUsage: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_EXTRA_USAGE, true)
+        set(value) = prefs.edit().putBoolean(KEY_SHOW_EXTRA_USAGE, value).apply()
+
     companion object {
         private const val PREFS_NAME = "claude_app_preferences"
         private const val KEY_NOTIFICATION_ENABLED = "notification_enabled"
+        private const val KEY_SHOW_SONNET = "show_sonnet"
+        private const val KEY_SHOW_OPUS = "show_opus"
+        private const val KEY_SHOW_COWORK = "show_cowork"
+        private const val KEY_SHOW_OAUTH_APPS = "show_oauth_apps"
+        private const val KEY_SHOW_EXTRA_USAGE = "show_extra_usage"
     }
 }

@@ -8,11 +8,13 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.IBinder
+import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import com.claudeusage.widget.MainActivity
 import com.claudeusage.widget.R
 import com.claudeusage.widget.data.local.CredentialManager
 import com.claudeusage.widget.data.model.UsageData
+import com.claudeusage.widget.data.model.UsageMetric
 import com.claudeusage.widget.data.repository.UsageRepository
 import kotlinx.coroutines.*
 
@@ -26,7 +28,7 @@ class UsageNotificationService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification("Loading usage data..."))
+        startForeground(NOTIFICATION_ID, buildSimpleNotification("Loading usage data..."))
         startPolling()
     }
 
@@ -65,40 +67,22 @@ class UsageNotificationService : Service() {
     }
 
     private fun buildUsageNotification(data: UsageData): Notification {
-        val fiveHour = data.fiveHour
-        val sevenDay = data.sevenDay
+        val remoteViews = RemoteViews(packageName, R.layout.notification_usage)
 
-        val lines = mutableListOf<String>()
-
-        if (fiveHour != null) {
-            val remaining = fiveHour.remainingDuration
-            val timeStr = if (remaining != null && remaining.seconds > 0) {
-                val h = remaining.seconds / 3600
-                val m = (remaining.seconds % 3600) / 60
-                if (h > 0) "${h}h ${m}m left" else "${m}m left"
-            } else ""
-            lines.add("5h: ${String.format("%.1f", fiveHour.utilization)}% $timeStr")
+        if (data.fiveHour != null) {
+            val progress = data.fiveHour.utilization.toInt().coerceIn(0, 100)
+            remoteViews.setProgressBar(R.id.progress_5h, 100, progress, false)
+            remoteViews.setTextViewText(R.id.percent_5h, String.format("%.1f%%", data.fiveHour.utilization))
+            remoteViews.setTextViewText(R.id.time_5h, formatRemaining(data.fiveHour))
         }
 
-        if (sevenDay != null) {
-            val remaining = sevenDay.remainingDuration
-            val timeStr = if (remaining != null && remaining.seconds > 0) {
-                val d = remaining.seconds / 86400
-                val h = (remaining.seconds % 86400) / 3600
-                if (d > 0) "${d}d ${h}h left" else "${h}h left"
-            } else ""
-            lines.add("7d: ${String.format("%.1f", sevenDay.utilization)}% $timeStr")
+        if (data.sevenDay != null) {
+            val progress = data.sevenDay.utilization.toInt().coerceIn(0, 100)
+            remoteViews.setProgressBar(R.id.progress_7d, 100, progress, false)
+            remoteViews.setTextViewText(R.id.percent_7d, String.format("%.1f%%", data.sevenDay.utilization))
+            remoteViews.setTextViewText(R.id.time_7d, formatRemaining(data.sevenDay))
         }
 
-        val title = lines.joinToString("  |  ").ifEmpty { "No usage data" }
-
-        // Use 5h utilization for progress bar in notification
-        val progress = fiveHour?.utilization?.toInt()?.coerceIn(0, 100) ?: 0
-
-        return buildNotification(title, progress)
-    }
-
-    private fun buildNotification(text: String, progress: Int = -1): Notification {
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
@@ -107,19 +91,49 @@ class UsageNotificationService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setCustomContentView(remoteViews)
+            .setCustomBigContentView(remoteViews)
+            .setContentIntent(pendingIntent)
+            .setOngoing(true)
+            .setSilent(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+            .build()
+    }
+
+    private fun formatRemaining(metric: UsageMetric): String {
+        val remaining = metric.remainingDuration ?: return ""
+        if (remaining.seconds <= 0) return ""
+        val d = remaining.seconds / 86400
+        val h = (remaining.seconds % 86400) / 3600
+        val m = (remaining.seconds % 3600) / 60
+        return when {
+            d > 0 -> "${d}d ${h}h"
+            h > 0 -> "${h}h ${m}m"
+            m > 0 -> "${m}m"
+            else -> ""
+        }
+    }
+
+    private fun buildSimpleNotification(text: String): Notification {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentText(text)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-
-        if (progress >= 0) {
-            builder.setProgress(100, progress, false)
-        }
-
-        return builder.build()
+            .build()
     }
 
     override fun onDestroy() {

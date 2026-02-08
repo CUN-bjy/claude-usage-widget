@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <!-- 5-hour session row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/label_5h"
+            android:layout_width="32dp"
+            android:layout_height="wrap_content"
+            android:text="5h"
+            android:textSize="11sp"
+            android:textColor="#AAAAAA" />
+
+        <ProgressBar
+            android:id="@+id/progress_5h"
+            style="@android:style/Widget.ProgressBar.Horizontal"
+            android:layout_width="0dp"
+            android:layout_height="8dp"
+            android:layout_weight="1"
+            android:max="100"
+            android:progress="0"
+            android:progressDrawable="@drawable/notification_progress" />
+
+        <TextView
+            android:id="@+id/percent_5h"
+            android:layout_width="42dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="0.0%"
+            android:textSize="11sp"
+            android:textColor="#DDDDDD"
+            android:textAlignment="textEnd" />
+
+        <TextView
+            android:id="@+id/time_5h"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:text=""
+            android:textSize="10sp"
+            android:textColor="#888888" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="4dp" />
+
+    <!-- 7-day limit row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/label_7d"
+            android:layout_width="32dp"
+            android:layout_height="wrap_content"
+            android:text="7d"
+            android:textSize="11sp"
+            android:textColor="#AAAAAA" />
+
+        <ProgressBar
+            android:id="@+id/progress_7d"
+            style="@android:style/Widget.ProgressBar.Horizontal"
+            android:layout_width="0dp"
+            android:layout_height="8dp"
+            android:layout_weight="1"
+            android:max="100"
+            android:progress="0"
+            android:progressDrawable="@drawable/notification_progress" />
+
+        <TextView
+            android:id="@+id/percent_7d"
+            android:layout_width="42dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="0.0%"
+            android:textSize="11sp"
+            android:textColor="#DDDDDD"
+            android:textAlignment="textEnd" />
+
+        <TextView
+            android:id="@+id/time_7d"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:text=""
+            android:textSize="10sp"
+            android:textColor="#888888" />
+    </LinearLayout>
+</LinearLayout>

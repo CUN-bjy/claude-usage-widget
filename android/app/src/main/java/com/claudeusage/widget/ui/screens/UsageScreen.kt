@@ -2,15 +2,12 @@ package com.claudeusage.widget.ui.screens
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
@@ -33,6 +30,7 @@ fun UsageScreen(
     uiState: UiState,
     isRefreshing: Boolean,
     lastUpdated: String?,
+    visibleMetrics: Set<String>,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
     onLoginClick: () -> Unit,
@@ -103,7 +101,8 @@ fun UsageScreen(
                 )
                 is UiState.Success -> UsageContent(
                     data = uiState.data,
-                    lastUpdated = lastUpdated
+                    lastUpdated = lastUpdated,
+                    visibleMetrics = visibleMetrics
                 )
                 is UiState.Error -> ErrorContent(
                     message = uiState.message,
@@ -265,9 +264,9 @@ private fun LoginContent(
 @Composable
 private fun UsageContent(
     data: UsageData,
-    lastUpdated: String?
+    lastUpdated: String?,
+    visibleMetrics: Set<String>
 ) {
-    var expandedExtras by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
 
     Column(
@@ -296,44 +295,22 @@ private fun UsageContent(
             )
         }
 
-        // Extra metrics
-        if (data.extraMetrics.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { expandedExtras = !expandedExtras }
-                    .padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Additional Metrics",
-                    color = TextSecondary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                Icon(
-                    imageVector = if (expandedExtras) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = "Toggle",
-                    tint = TextMuted,
-                    modifier = Modifier.size(20.dp)
-                )
+        // Extra metrics (filtered by settings)
+        val filteredMetrics = data.extraMetrics.filter { (label, _) ->
+            when {
+                label.contains("Sonnet") -> "sonnet" in visibleMetrics
+                label.contains("Opus") -> "opus" in visibleMetrics
+                label.contains("Cowork") -> "cowork" in visibleMetrics
+                label.contains("OAuth") -> "oauth_apps" in visibleMetrics
+                label.contains("Extra") -> "extra_usage" in visibleMetrics
+                else -> true
             }
-
-            AnimatedVisibility(
-                visible = expandedExtras,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                Column {
-                    data.extraMetrics.forEach { (label, metric) ->
-                        Spacer(modifier = Modifier.height(8.dp))
-                        MiniUsageCard(label = label, metric = metric)
-                    }
-                }
+        }
+        if (filteredMetrics.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            filteredMetrics.forEach { (label, metric) ->
+                Spacer(modifier = Modifier.height(8.dp))
+                MiniUsageCard(label = label, metric = metric)
             }
         }
 

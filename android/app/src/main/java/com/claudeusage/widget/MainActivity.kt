@@ -11,12 +11,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.claudeusage.widget.data.local.AppPreferences
 import com.claudeusage.widget.service.UsageNotificationService
 import com.claudeusage.widget.service.UsageUpdateScheduler
+import com.claudeusage.widget.ui.screens.MetricToggle
 import com.claudeusage.widget.ui.screens.SettingsScreen
 import com.claudeusage.widget.ui.screens.UiState
 import com.claudeusage.widget.ui.screens.UsageScreen
@@ -32,6 +34,7 @@ class MainActivity : ComponentActivity() {
 
     private var currentScreen by mutableStateOf(Screen.Usage)
     private var notificationEnabled by mutableStateOf(false)
+    private val metricVisibility = mutableStateMapOf<String, Boolean>()
 
     private val loginLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -63,6 +66,22 @@ class MainActivity : ComponentActivity() {
         appPreferences = AppPreferences(applicationContext)
         notificationEnabled = appPreferences.notificationEnabled
 
+        // Load metric visibility from preferences
+        metricVisibility["sonnet"] = appPreferences.showSonnet
+        metricVisibility["opus"] = appPreferences.showOpus
+        metricVisibility["cowork"] = appPreferences.showCowork
+        metricVisibility["oauth_apps"] = appPreferences.showOauthApps
+        metricVisibility["extra_usage"] = appPreferences.showExtraUsage
+
+        // Request notification permission on first launch (Android 13+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
         // Schedule background updates
         UsageUpdateScheduler.schedule(applicationContext)
 
@@ -78,6 +97,9 @@ class MainActivity : ComponentActivity() {
                             uiState = uiState,
                             isRefreshing = isRefreshing,
                             lastUpdated = lastUpdated,
+                            visibleMetrics = metricVisibility
+                                .filter { it.value }
+                                .keys,
                             onRefresh = viewModel::refresh,
                             onLogout = {
                                 viewModel.logout()
@@ -95,6 +117,16 @@ class MainActivity : ComponentActivity() {
                             notificationEnabled = notificationEnabled,
                             onNotificationToggle = { enabled ->
                                 handleNotificationToggle(enabled)
+                            },
+                            metricToggles = listOf(
+                                MetricToggle("sonnet", "Sonnet (7d)", metricVisibility["sonnet"] ?: true),
+                                MetricToggle("opus", "Opus (7d)", metricVisibility["opus"] ?: true),
+                                MetricToggle("cowork", "Cowork (7d)", metricVisibility["cowork"] ?: true),
+                                MetricToggle("oauth_apps", "OAuth Apps (7d)", metricVisibility["oauth_apps"] ?: true),
+                                MetricToggle("extra_usage", "Extra Usage", metricVisibility["extra_usage"] ?: true)
+                            ),
+                            onMetricToggle = { key, enabled ->
+                                handleMetricToggle(key, enabled)
                             },
                             onBack = { currentScreen = Screen.Usage }
                         )
@@ -144,6 +176,17 @@ class MainActivity : ComponentActivity() {
             appPreferences.notificationEnabled = false
             notificationEnabled = false
             UsageNotificationService.stop(applicationContext)
+        }
+    }
+
+    private fun handleMetricToggle(key: String, enabled: Boolean) {
+        metricVisibility[key] = enabled
+        when (key) {
+            "sonnet" -> appPreferences.showSonnet = enabled
+            "opus" -> appPreferences.showOpus = enabled
+            "cowork" -> appPreferences.showCowork = enabled
+            "oauth_apps" -> appPreferences.showOauthApps = enabled
+            "extra_usage" -> appPreferences.showExtraUsage = enabled
         }
     }
 }
