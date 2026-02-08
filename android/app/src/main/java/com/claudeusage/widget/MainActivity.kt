@@ -113,20 +113,14 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     Screen.Settings -> {
-                        // Only show toggles for metrics that exist in API data
-                        val availableToggles = buildList {
-                            val data = (uiState as? UiState.Success)?.data
-                            if (data?.sevenDaySonnet != null)
-                                add(MetricToggle("sonnet", "Sonnet (7d)", metricVisibility["sonnet"] ?: true))
-                            if (data?.sevenDayOpus != null)
-                                add(MetricToggle("opus", "Opus (7d)", metricVisibility["opus"] ?: true))
-                            if (data?.sevenDayCowork != null)
-                                add(MetricToggle("cowork", "Cowork (7d)", metricVisibility["cowork"] ?: true))
-                            if (data?.sevenDayOauthApps != null)
-                                add(MetricToggle("oauth_apps", "OAuth Apps (7d)", metricVisibility["oauth_apps"] ?: true))
-                            if (data?.extraUsage != null)
-                                add(MetricToggle("extra_usage", "Extra Usage", metricVisibility["extra_usage"] ?: true))
-                        }
+                        // Always show all toggles
+                        val availableToggles = listOf(
+                            MetricToggle("sonnet", "Sonnet (7d)", metricVisibility["sonnet"] ?: true),
+                            MetricToggle("opus", "Opus (7d)", metricVisibility["opus"] ?: false),
+                            MetricToggle("cowork", "Cowork (7d)", metricVisibility["cowork"] ?: false),
+                            MetricToggle("oauth_apps", "OAuth Apps (7d)", metricVisibility["oauth_apps"] ?: false),
+                            MetricToggle("extra_usage", "Extra Usage", metricVisibility["extra_usage"] ?: true)
+                        )
 
                         SettingsScreen(
                             notificationEnabled = notificationEnabled,

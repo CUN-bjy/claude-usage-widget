@@ -18,15 +18,15 @@ class AppPreferences(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_SHOW_SONNET, value).apply()
 
     var showOpus: Boolean
-        get() = prefs.getBoolean(KEY_SHOW_OPUS, true)
+        get() = prefs.getBoolean(KEY_SHOW_OPUS, false)
         set(value) = prefs.edit().putBoolean(KEY_SHOW_OPUS, value).apply()
 
     var showCowork: Boolean
-        get() = prefs.getBoolean(KEY_SHOW_COWORK, true)
+        get() = prefs.getBoolean(KEY_SHOW_COWORK, false)
         set(value) = prefs.edit().putBoolean(KEY_SHOW_COWORK, value).apply()
 
     var showOauthApps: Boolean
-        get() = prefs.getBoolean(KEY_SHOW_OAUTH_APPS, true)
+        get() = prefs.getBoolean(KEY_SHOW_OAUTH_APPS, false)
         set(value) = prefs.edit().putBoolean(KEY_SHOW_OAUTH_APPS, value).apply()
 
     var showExtraUsage: Boolean

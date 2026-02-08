@@ -79,12 +79,11 @@ fun SettingsScreen(
                 )
             }
 
-            if (metricToggles.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-                // Display section
-                SectionLabel("Display")
-                Card(
+            // Display section
+            SectionLabel("Display")
+            Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = DarkCard),
                 shape = RoundedCornerShape(16.dp)
@@ -104,7 +103,6 @@ fun SettingsScreen(
                         }
                     }
                 }
-            }
             }
         }
     }

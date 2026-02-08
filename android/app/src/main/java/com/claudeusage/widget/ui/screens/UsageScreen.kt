@@ -324,17 +324,6 @@ private fun UsageContent(
             )
         }
 
-        // Debug: API response info
-        if (data.debugInfo.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = data.debugInfo,
-                color = TextMuted.copy(alpha = 0.5f),
-                fontSize = 9.sp,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center
-            )
-        }
 
         Spacer(modifier = Modifier.height(16.dp))
     }

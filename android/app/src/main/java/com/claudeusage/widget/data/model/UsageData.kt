@@ -57,13 +57,16 @@ data class UsageData(
     val debugInfo: String = ""
 ) {
     val extraMetrics: List<Pair<String, UsageMetric>>
-        get() = listOfNotNull(
-            sevenDaySonnet?.let { "Sonnet (7d)" to it },
-            sevenDayOpus?.let { "Opus (7d)" to it },
-            sevenDayCowork?.let { "Cowork (7d)" to it },
-            sevenDayOauthApps?.let { "OAuth Apps (7d)" to it },
-            extraUsage?.let { "Extra Usage" to it }
-        )
+        get() {
+            val default = UsageMetric(0.0, null)
+            return listOf(
+                "Sonnet (7d)" to (sevenDaySonnet ?: default),
+                "Opus (7d)" to (sevenDayOpus ?: default),
+                "Cowork (7d)" to (sevenDayCowork ?: default),
+                "OAuth Apps (7d)" to (sevenDayOauthApps ?: default),
+                "Extra Usage" to (extraUsage ?: default)
+            )
+        }
 
     companion object {
         fun fromJson(json: JSONObject): UsageData {
