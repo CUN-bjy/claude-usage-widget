@@ -171,13 +171,13 @@ private fun LoginWebViewScreen(
                             settings.userAgentString =
                                 "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
 
+                            val webView = this
                             try {
-                                CookieManager.getInstance().apply {
-                                    setAcceptCookie(true)
-                                    setAcceptThirdPartyCookies(this@apply, true)
-                                    removeAllCookies(null)
-                                    flush()
-                                }
+                                val cookieManager = CookieManager.getInstance()
+                                cookieManager.setAcceptCookie(true)
+                                cookieManager.setAcceptThirdPartyCookies(webView, true)
+                                cookieManager.removeAllCookies(null)
+                                cookieManager.flush()
                             } catch (e: Exception) {
                                 // CookieManager might not be available on some devices
                             }
