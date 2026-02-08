@@ -6,6 +6,9 @@
 # Google Tink / ErrorProne annotations (used by androidx.security:security-crypto)
 -dontwarn com.google.errorprone.annotations.**
 
+# WebView (prevent R8 from stripping WebViewClient subclasses)
+-keepclassmembers class * extends android.webkit.WebViewClient { *; }
+
 # Keep data models
 -keep class com.claudeusage.widget.data.model.** { *; }
 

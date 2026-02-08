@@ -30,25 +30,36 @@ class LoginActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Clear any existing cookies for fresh login
-        CookieManager.getInstance().removeAllCookies(null)
-        CookieManager.getInstance().flush()
-
         setContent {
             ClaudeUsageTheme {
-                LoginWebViewScreen(
-                    onSessionCaptured = { sessionKey ->
-                        val resultIntent = Intent().apply {
-                            putExtra(EXTRA_SESSION_KEY, sessionKey)
+                var webViewError by remember { mutableStateOf<String?>(null) }
+
+                if (webViewError != null) {
+                    WebViewErrorScreen(
+                        message = webViewError!!,
+                        onClose = {
+                            setResult(Activity.RESULT_CANCELED)
+                            finish()
                         }
-                        setResult(Activity.RESULT_OK, resultIntent)
-                        finish()
-                    },
-                    onClose = {
-                        setResult(Activity.RESULT_CANCELED)
-                        finish()
-                    }
-                )
+                    )
+                } else {
+                    LoginWebViewScreen(
+                        onSessionCaptured = { sessionKey ->
+                            val resultIntent = Intent().apply {
+                                putExtra(EXTRA_SESSION_KEY, sessionKey)
+                            }
+                            setResult(Activity.RESULT_OK, resultIntent)
+                            finish()
+                        },
+                        onClose = {
+                            setResult(Activity.RESULT_CANCELED)
+                            finish()
+                        },
+                        onError = { error ->
+                            webViewError = error
+                        }
+                    )
+                }
             }
         }
     }
@@ -59,11 +70,64 @@ class LoginActivity : ComponentActivity() {
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WebViewErrorScreen(
+    message: String,
+    onClose: () -> Unit
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Sign in to Claude", fontSize = 18.sp) },
+                navigationIcon = {
+                    IconButton(onClick = onClose) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = TextSecondary)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = DarkBackground,
+                    titleContentColor = TextPrimary
+                )
+            )
+        },
+        containerColor = DarkBackground
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "WebView Unavailable",
+                fontSize = 18.sp,
+                color = TextPrimary
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = message,
+                fontSize = 14.sp,
+                color = TextSecondary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Please use \"Enter session key manually\" instead.",
+                fontSize = 14.sp,
+                color = TextSecondary
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 private fun LoginWebViewScreen(
     onSessionCaptured: (String) -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onError: (String) -> Unit
 ) {
     var isLoading by remember { mutableStateOf(true) }
 
@@ -100,30 +164,44 @@ private fun LoginWebViewScreen(
         ) {
             AndroidView(
                 factory = { context ->
-                    WebView(context).apply {
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        settings.userAgentString =
-                            "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
+                    try {
+                        WebView(context).apply {
+                            settings.javaScriptEnabled = true
+                            settings.domStorageEnabled = true
+                            settings.userAgentString =
+                                "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
 
-                        CookieManager.getInstance().setAcceptCookie(true)
-                        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-
-                        webViewClient = object : WebViewClient() {
-                            override fun shouldOverrideUrlLoading(
-                                view: WebView?,
-                                request: WebResourceRequest?
-                            ): Boolean {
-                                return false
+                            try {
+                                CookieManager.getInstance().apply {
+                                    setAcceptCookie(true)
+                                    setAcceptThirdPartyCookies(this@apply, true)
+                                    removeAllCookies(null)
+                                    flush()
+                                }
+                            } catch (e: Exception) {
+                                // CookieManager might not be available on some devices
                             }
 
-                            override fun onPageFinished(view: WebView?, url: String?) {
-                                isLoading = false
-                                checkForSessionCookie(url, onSessionCaptured)
+                            webViewClient = object : WebViewClient() {
+                                override fun shouldOverrideUrlLoading(
+                                    view: WebView?,
+                                    request: WebResourceRequest?
+                                ): Boolean {
+                                    return false
+                                }
+
+                                override fun onPageFinished(view: WebView?, url: String?) {
+                                    isLoading = false
+                                    checkForSessionCookie(url, onSessionCaptured)
+                                }
                             }
+
+                            loadUrl("https://claude.ai/login")
                         }
-
-                        loadUrl("https://claude.ai/login")
+                    } catch (e: Exception) {
+                        onError("Failed to initialize WebView: ${e.message}")
+                        // Return a dummy view since factory must return a View
+                        android.view.View(context)
                     }
                 },
                 modifier = Modifier.fillMaxSize()
@@ -145,16 +223,19 @@ private fun LoginWebViewScreen(
 }
 
 private fun checkForSessionCookie(url: String?, onSessionCaptured: (String) -> Unit) {
-    val cookies = CookieManager.getInstance().getCookie("https://claude.ai") ?: return
+    try {
+        val cookies = CookieManager.getInstance().getCookie("https://claude.ai") ?: return
 
-    // Parse cookies to find sessionKey
-    val sessionKey = cookies.split(";")
-        .map { it.trim() }
-        .firstOrNull { it.startsWith("sessionKey=") }
-        ?.substringAfter("sessionKey=")
-        ?.trim()
+        val sessionKey = cookies.split(";")
+            .map { it.trim() }
+            .firstOrNull { it.startsWith("sessionKey=") }
+            ?.substringAfter("sessionKey=")
+            ?.trim()
 
-    if (!sessionKey.isNullOrBlank()) {
-        onSessionCaptured(sessionKey)
+        if (!sessionKey.isNullOrBlank()) {
+            onSessionCaptured(sessionKey)
+        }
+    } catch (_: Exception) {
+        // CookieManager not available
     }
 }
