@@ -272,7 +272,8 @@ private fun UsageContent(
             UsageCard(
                 title = "Current Session",
                 subtitle = "5-hour window",
-                metric = data.fiveHour
+                metric = data.fiveHour,
+                totalWindowHours = 5.0
             )
             Spacer(modifier = Modifier.height(12.dp))
         }
@@ -281,7 +282,8 @@ private fun UsageContent(
             UsageCard(
                 title = "Weekly Limit",
                 subtitle = "7-day window",
-                metric = data.sevenDay
+                metric = data.sevenDay,
+                totalWindowHours = 168.0
             )
         }
 
@@ -346,7 +348,8 @@ private fun UsageContent(
 private fun UsageCard(
     title: String,
     subtitle: String,
-    metric: com.claudeusage.widget.data.model.UsageMetric
+    metric: com.claudeusage.widget.data.model.UsageMetric,
+    totalWindowHours: Double = 5.0
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -380,7 +383,8 @@ private fun UsageCard(
                 label = "",
                 utilization = metric.utilization,
                 statusLevel = metric.statusLevel,
-                remainingDuration = metric.remainingDuration
+                remainingDuration = metric.remainingDuration,
+                totalWindowHours = totalWindowHours
             )
         }
     }

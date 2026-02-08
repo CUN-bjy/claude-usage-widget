@@ -34,12 +34,26 @@ fun UsageProgressBar(
     utilization: Double,
     statusLevel: StatusLevel,
     remainingDuration: Duration?,
+    totalWindowHours: Double = 5.0,
     modifier: Modifier = Modifier
 ) {
     val animatedProgress by animateFloatAsState(
         targetValue = (utilization / 100.0).toFloat().coerceIn(0f, 1f),
         animationSpec = tween(durationMillis = 800),
         label = "progress"
+    )
+
+    // Calculate remaining time as fraction of total window
+    val remainingFraction = if (remainingDuration != null && totalWindowHours > 0) {
+        val totalWindowSeconds = totalWindowHours * 3600
+        val remainingSeconds = remainingDuration.seconds.toDouble()
+        (remainingSeconds / totalWindowSeconds).toFloat().coerceIn(0f, 1f - animatedProgress)
+    } else 0f
+
+    val animatedRemaining by animateFloatAsState(
+        targetValue = remainingFraction,
+        animationSpec = tween(durationMillis = 800),
+        label = "remaining"
     )
 
     val barColor = when (statusLevel) {
@@ -92,7 +106,7 @@ fun UsageProgressBar(
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        // Progress bar
+        // Progress bar with usage + remaining time
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -100,17 +114,32 @@ fun UsageProgressBar(
                 .clip(RoundedCornerShape(5.dp))
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
-                // Track
+                val cornerRadius = CornerRadius(5.dp.toPx())
+
+                // Track background
                 drawRoundRect(
                     color = ProgressTrack,
-                    cornerRadius = CornerRadius(5.dp.toPx())
+                    cornerRadius = cornerRadius
                 )
-                // Fill
-                drawRoundRect(
-                    brush = gradient,
-                    size = Size(size.width * animatedProgress, size.height),
-                    cornerRadius = CornerRadius(5.dp.toPx())
-                )
+
+                // Remaining time portion (light purple, drawn first so usage overlaps)
+                val totalFilledWidth = size.width * (animatedProgress + animatedRemaining)
+                if (animatedRemaining > 0f) {
+                    drawRoundRect(
+                        color = ClaudePurple.copy(alpha = 0.25f),
+                        size = Size(totalFilledWidth, size.height),
+                        cornerRadius = cornerRadius
+                    )
+                }
+
+                // Usage portion (solid color, on top)
+                if (animatedProgress > 0f) {
+                    drawRoundRect(
+                        brush = gradient,
+                        size = Size(size.width * animatedProgress, size.height),
+                        cornerRadius = cornerRadius
+                    )
+                }
             }
         }
 
@@ -138,7 +167,6 @@ fun CircularTimer(
         val radius = (this.size.minDimension - strokeWidth) / 2
         val center = Offset(this.size.width / 2, this.size.height / 2)
 
-        // Background circle
         drawCircle(
             color = ProgressTrack,
             radius = radius,
@@ -146,7 +174,6 @@ fun CircularTimer(
             style = Stroke(width = strokeWidth)
         )
 
-        // Progress arc
         val totalSeconds = remainingDuration.seconds.toFloat()
         val progress = if (totalSeconds > 0) {
             (totalSeconds % 3600) / 3600f
@@ -162,7 +189,6 @@ fun CircularTimer(
             size = Size(radius * 2, radius * 2)
         )
 
-        // Center dot
         val angle = (-90.0 + 360.0 * progress) * PI / 180.0
         val dotX = center.x + radius * 0.5f * cos(angle).toFloat()
         val dotY = center.y + radius * 0.5f * sin(angle).toFloat()

@@ -119,7 +119,7 @@ class LoginActivity : ComponentActivity() {
     companion object {
         const val EXTRA_SESSION_KEY = "session_key"
 
-        // JS to hide Google OAuth button and show email login guidance
+        // JS to hide Google OAuth button and 'or' divider
         internal const val HIDE_GOOGLE_BUTTON_JS = """
             (function() {
                 var style = document.createElement('style');
@@ -133,11 +133,16 @@ class LoginActivity : ComponentActivity() {
                 `;
                 document.head.appendChild(style);
 
-                var buttons = document.querySelectorAll('button');
-                buttons.forEach(function(btn) {
-                    var text = btn.textContent || '';
-                    if (text.toLowerCase().includes('google')) {
-                        btn.style.display = 'none';
+                var allElements = document.querySelectorAll('*');
+                allElements.forEach(function(el) {
+                    var text = (el.textContent || '').trim().toLowerCase();
+                    if (text === 'or') {
+                        el.style.display = 'none';
+                    }
+                    if (text.includes('google')) {
+                        if (el.tagName === 'BUTTON' || el.tagName === 'A' || el.closest('button')) {
+                            (el.closest('button') || el).style.display = 'none';
+                        }
                     }
                 });
             })();
@@ -318,7 +323,7 @@ private fun LoginWebViewScreen(
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Text(
-                            text = "Use \"Continue with email\" to sign in.\nGoogle login is not supported in-app.",
+                            text = "Enter your email address to sign in.",
                             modifier = Modifier.padding(16.dp),
                             color = TextPrimary,
                             fontSize = 13.sp,

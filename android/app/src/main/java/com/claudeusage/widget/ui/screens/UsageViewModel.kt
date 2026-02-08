@@ -8,6 +8,7 @@ import com.claudeusage.widget.data.model.Credentials
 import com.claudeusage.widget.data.model.UsageData
 import com.claudeusage.widget.data.repository.AuthException
 import com.claudeusage.widget.data.repository.UsageRepository
+import com.claudeusage.widget.service.UsageNotificationService
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -91,6 +92,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
         credentialManager.clearCredentials()
         _uiState.value = UiState.LoginRequired
         _lastUpdated.value = null
+        UsageNotificationService.stop(getApplication())
     }
 
     private suspend fun fetchUsageData() {
@@ -106,6 +108,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.value = UiState.Success(data)
                 _lastUpdated.value = formatLastUpdated()
                 startAutoRefresh()
+                UsageNotificationService.start(getApplication())
             },
             onFailure = { error ->
                 val isAuth = error is AuthException
