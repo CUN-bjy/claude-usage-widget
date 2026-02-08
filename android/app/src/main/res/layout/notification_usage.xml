@@ -50,9 +50,10 @@
             android:textColor="#888888" />
     </LinearLayout>
 
-    <View
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="4dp" />
+        android:layout_height="4dp"
+        android:orientation="horizontal" />
 
     <!-- 7-day limit row -->
     <LinearLayout
