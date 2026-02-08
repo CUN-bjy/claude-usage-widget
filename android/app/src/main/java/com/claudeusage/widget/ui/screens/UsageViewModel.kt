@@ -3,6 +3,7 @@ package com.claudeusage.widget.ui.screens
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.claudeusage.widget.data.local.AppPreferences
 import com.claudeusage.widget.data.local.CredentialManager
 import com.claudeusage.widget.data.model.Credentials
 import com.claudeusage.widget.data.model.UsageData
@@ -27,6 +28,7 @@ sealed class UiState {
 class UsageViewModel(application: Application) : AndroidViewModel(application) {
 
     private val credentialManager = CredentialManager(application)
+    private val appPreferences = AppPreferences(application)
     private val repository = UsageRepository()
 
     private val _uiState = MutableStateFlow<UiState>(UiState.Loading)
@@ -108,7 +110,9 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.value = UiState.Success(data)
                 _lastUpdated.value = formatLastUpdated()
                 startAutoRefresh()
-                UsageNotificationService.start(getApplication())
+                if (appPreferences.notificationEnabled) {
+                    UsageNotificationService.start(getApplication())
+                }
             },
             onFailure = { error ->
                 val isAuth = error is AuthException

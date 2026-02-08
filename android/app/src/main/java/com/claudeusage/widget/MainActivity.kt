@@ -1,6 +1,9 @@
 package com.claudeusage.widget
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -8,16 +11,27 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.claudeusage.widget.data.local.AppPreferences
+import com.claudeusage.widget.service.UsageNotificationService
 import com.claudeusage.widget.service.UsageUpdateScheduler
+import com.claudeusage.widget.ui.screens.SettingsScreen
 import com.claudeusage.widget.ui.screens.UiState
 import com.claudeusage.widget.ui.screens.UsageScreen
 import com.claudeusage.widget.ui.screens.UsageViewModel
 import com.claudeusage.widget.ui.theme.ClaudeUsageTheme
 
+private enum class Screen { Usage, Settings }
+
 class MainActivity : ComponentActivity() {
 
     private val viewModel: UsageViewModel by viewModels()
+    private lateinit var appPreferences: AppPreferences
+
+    private var currentScreen by mutableStateOf(Screen.Usage)
+    private var notificationEnabled by mutableStateOf(false)
 
     private val loginLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -30,9 +44,24 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            appPreferences.notificationEnabled = true
+            notificationEnabled = true
+            if (viewModel.uiState.value is UiState.Success) {
+                UsageNotificationService.start(applicationContext)
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+
+        appPreferences = AppPreferences(applicationContext)
+        notificationEnabled = appPreferences.notificationEnabled
 
         // Schedule background updates
         UsageUpdateScheduler.schedule(applicationContext)
@@ -43,20 +72,34 @@ class MainActivity : ComponentActivity() {
                 val isRefreshing by viewModel.isRefreshing.collectAsState()
                 val lastUpdated by viewModel.lastUpdated.collectAsState()
 
-                UsageScreen(
-                    uiState = uiState,
-                    isRefreshing = isRefreshing,
-                    lastUpdated = lastUpdated,
-                    onRefresh = viewModel::refresh,
-                    onLogout = {
-                        viewModel.logout()
-                        UsageUpdateScheduler.cancel(applicationContext)
-                    },
-                    onLoginClick = { launchLogin() },
-                    onManualLogin = { sessionKey ->
-                        viewModel.onManualLogin(sessionKey)
+                when (currentScreen) {
+                    Screen.Usage -> {
+                        UsageScreen(
+                            uiState = uiState,
+                            isRefreshing = isRefreshing,
+                            lastUpdated = lastUpdated,
+                            onRefresh = viewModel::refresh,
+                            onLogout = {
+                                viewModel.logout()
+                                UsageUpdateScheduler.cancel(applicationContext)
+                            },
+                            onLoginClick = { launchLogin() },
+                            onManualLogin = { sessionKey ->
+                                viewModel.onManualLogin(sessionKey)
+                            },
+                            onSettingsClick = { currentScreen = Screen.Settings }
+                        )
                     }
-                )
+                    Screen.Settings -> {
+                        SettingsScreen(
+                            notificationEnabled = notificationEnabled,
+                            onNotificationToggle = { enabled ->
+                                handleNotificationToggle(enabled)
+                            },
+                            onBack = { currentScreen = Screen.Usage }
+                        )
+                    }
+                }
             }
         }
     }
@@ -72,5 +115,35 @@ class MainActivity : ComponentActivity() {
     private fun launchLogin() {
         val intent = Intent(this, LoginActivity::class.java)
         loginLauncher.launch(intent)
+    }
+
+    private fun handleNotificationToggle(enabled: Boolean) {
+        if (enabled) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                    == PackageManager.PERMISSION_GRANTED
+                ) {
+                    appPreferences.notificationEnabled = true
+                    notificationEnabled = true
+                    if (viewModel.uiState.value is UiState.Success) {
+                        UsageNotificationService.start(applicationContext)
+                    }
+                } else {
+                    notificationPermissionLauncher.launch(
+                        Manifest.permission.POST_NOTIFICATIONS
+                    )
+                }
+            } else {
+                appPreferences.notificationEnabled = true
+                notificationEnabled = true
+                if (viewModel.uiState.value is UiState.Success) {
+                    UsageNotificationService.start(applicationContext)
+                }
+            }
+        } else {
+            appPreferences.notificationEnabled = false
+            notificationEnabled = false
+            UsageNotificationService.stop(applicationContext)
+        }
     }
 }

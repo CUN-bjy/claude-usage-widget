@@ -43,17 +43,17 @@ fun UsageProgressBar(
         label = "progress"
     )
 
-    // Calculate remaining time as fraction of total window
-    val remainingFraction = if (remainingDuration != null && totalWindowHours > 0) {
+    // Calculate elapsed time as fraction of total window
+    val elapsedFraction = if (remainingDuration != null && totalWindowHours > 0) {
         val totalWindowSeconds = totalWindowHours * 3600
         val remainingSeconds = remainingDuration.seconds.toDouble()
-        (remainingSeconds / totalWindowSeconds).toFloat().coerceIn(0f, 1f - animatedProgress)
+        (1.0 - remainingSeconds / totalWindowSeconds).toFloat().coerceIn(0f, 1f)
     } else 0f
 
-    val animatedRemaining by animateFloatAsState(
-        targetValue = remainingFraction,
+    val animatedElapsed by animateFloatAsState(
+        targetValue = elapsedFraction,
         animationSpec = tween(durationMillis = 800),
-        label = "remaining"
+        label = "elapsed"
     )
 
     val barColor = when (statusLevel) {
@@ -122,12 +122,11 @@ fun UsageProgressBar(
                     cornerRadius = cornerRadius
                 )
 
-                // Remaining time portion (light purple, drawn first so usage overlaps)
-                val totalFilledWidth = size.width * (animatedProgress + animatedRemaining)
-                if (animatedRemaining > 0f) {
+                // Elapsed time portion (light purple, drawn first so usage overlaps)
+                if (animatedElapsed > 0f) {
                     drawRoundRect(
                         color = ClaudePurple.copy(alpha = 0.25f),
-                        size = Size(totalFilledWidth, size.height),
+                        size = Size(size.width * animatedElapsed, size.height),
                         cornerRadius = cornerRadius
                     )
                 }

@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,7 +36,8 @@ fun UsageScreen(
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
     onLoginClick: () -> Unit,
-    onManualLogin: (String) -> Unit
+    onManualLogin: (String) -> Unit,
+    onSettingsClick: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -49,6 +51,13 @@ fun UsageScreen(
                 },
                 actions = {
                     if (uiState is UiState.Success) {
+                        IconButton(onClick = onSettingsClick) {
+                            Icon(
+                                Icons.Default.Settings,
+                                contentDescription = "Settings",
+                                tint = TextSecondary
+                            )
+                        }
                         IconButton(onClick = onRefresh, enabled = !isRefreshing) {
                             if (isRefreshing) {
                                 CircularProgressIndicator(
@@ -393,7 +402,8 @@ private fun UsageCard(
 @Composable
 private fun MiniUsageCard(
     label: String,
-    metric: com.claudeusage.widget.data.model.UsageMetric
+    metric: com.claudeusage.widget.data.model.UsageMetric,
+    totalWindowHours: Double = 168.0
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -405,7 +415,8 @@ private fun MiniUsageCard(
                 label = label,
                 utilization = metric.utilization,
                 statusLevel = metric.statusLevel,
-                remainingDuration = metric.remainingDuration
+                remainingDuration = metric.remainingDuration,
+                totalWindowHours = totalWindowHours
             )
         }
     }
