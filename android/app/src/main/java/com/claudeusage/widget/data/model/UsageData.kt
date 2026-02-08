@@ -61,7 +61,7 @@ data class UsageData(
             sevenDayCowork?.let { "Cowork (7d)" to it },
             sevenDayOauthApps?.let { "OAuth Apps (7d)" to it },
             extraUsage?.let { "Extra Usage" to it }
-        ).filter { it.second.utilization > 0 }
+        ).filter { it.second.utilization > 0 || it.second.resetsAt != null }
 
     companion object {
         fun fromJson(json: JSONObject): UsageData {
