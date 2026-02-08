@@ -12,5 +12,9 @@
 # Keep data models
 -keep class com.claudeusage.widget.data.model.** { *; }
 
+# Crash handler (must survive R8 for crash reporting to work)
+-keep class com.claudeusage.widget.CrashActivity { *; }
+-keep class com.claudeusage.widget.CrashHandler { *; }
+
 # Glance widget
 -keep class com.claudeusage.widget.widget.** { *; }
