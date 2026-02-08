@@ -198,19 +198,29 @@ private fun LoginContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // Logo placeholder
-        Box(
-            modifier = Modifier
-                .size(80.dp)
-                .clip(CircleShape)
-                .background(DarkSurfaceVariant),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "C",
-                fontSize = 36.sp,
-                fontWeight = FontWeight.Bold,
-                color = ClaudePurple
+        // Ring logo
+        Canvas(modifier = Modifier.size(80.dp)) {
+            val s = size.minDimension
+            val c = Offset(s / 2, s / 2)
+            val outerR = s * 0.45f
+            val sw = s * 0.13f
+            val midR = outerR - sw / 2
+            val rect = Size(midR * 2, midR * 2)
+            val tl = Offset(c.x - midR, c.y - midR)
+
+            drawArc(
+                color = ClaudePurple,
+                startAngle = 290f, sweepAngle = 270f,
+                useCenter = false,
+                style = Stroke(width = sw, cap = StrokeCap.Butt),
+                topLeft = tl, size = rect
+            )
+            drawArc(
+                color = Color.White,
+                startAngle = 200f, sweepAngle = 90f,
+                useCenter = false,
+                style = Stroke(width = sw, cap = StrokeCap.Butt),
+                topLeft = tl, size = rect
             )
         }
 
