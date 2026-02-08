@@ -120,7 +120,7 @@ class LoginActivity : ComponentActivity() {
         const val EXTRA_SESSION_KEY = "session_key"
 
         // JS to hide Google OAuth button and show email login guidance
-        private const val HIDE_GOOGLE_BUTTON_JS = """
+        internal const val HIDE_GOOGLE_BUTTON_JS = """
             (function() {
                 var style = document.createElement('style');
                 style.textContent = `
