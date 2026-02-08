@@ -111,25 +111,21 @@ private fun UsageDataContent(data: UsageData) {
 
         Spacer(modifier = GlanceModifier.height(8.dp))
 
-        if (data.fiveHour != null) {
-            WidgetUsageRow(
-                label = "Session",
-                utilization = data.fiveHour.utilization
-            )
-            Spacer(modifier = GlanceModifier.height(4.dp))
-            WidgetProgressBar(utilization = data.fiveHour.utilization)
-        }
+        WidgetUsageRow(
+            label = "Session",
+            utilization = data.fiveHour?.utilization ?: 0.0
+        )
+        Spacer(modifier = GlanceModifier.height(4.dp))
+        WidgetProgressBar(utilization = data.fiveHour?.utilization ?: 0.0)
 
         Spacer(modifier = GlanceModifier.height(8.dp))
 
-        if (data.sevenDay != null) {
-            WidgetUsageRow(
-                label = "Weekly",
-                utilization = data.sevenDay.utilization
-            )
-            Spacer(modifier = GlanceModifier.height(4.dp))
-            WidgetProgressBar(utilization = data.sevenDay.utilization)
-        }
+        WidgetUsageRow(
+            label = "Weekly",
+            utilization = data.sevenDay?.utilization ?: 0.0
+        )
+        Spacer(modifier = GlanceModifier.height(4.dp))
+        WidgetProgressBar(utilization = data.sevenDay?.utilization ?: 0.0)
     }
 }
 

@@ -275,25 +275,23 @@ private fun UsageContent(
             .verticalScroll(scrollState)
             .padding(horizontal = 20.dp, vertical = 8.dp)
     ) {
-        // Main usage cards
-        if (data.fiveHour != null) {
-            UsageCard(
-                title = "Current Session",
-                subtitle = "5-hour window",
-                metric = data.fiveHour,
-                totalWindowHours = 5.0
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-        }
+        // Main usage cards - always show even when null (after reset)
+        val defaultMetric = com.claudeusage.widget.data.model.UsageMetric(0.0, null)
 
-        if (data.sevenDay != null) {
-            UsageCard(
-                title = "Weekly Limit",
-                subtitle = "7-day window",
-                metric = data.sevenDay,
-                totalWindowHours = 168.0
-            )
-        }
+        UsageCard(
+            title = "Current Session",
+            subtitle = "5-hour window",
+            metric = data.fiveHour ?: defaultMetric,
+            totalWindowHours = 5.0
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+
+        UsageCard(
+            title = "Weekly Limit",
+            subtitle = "7-day window",
+            metric = data.sevenDay ?: defaultMetric,
+            totalWindowHours = 168.0
+        )
 
         // Extra metrics (filtered by settings)
         val filteredMetrics = data.extraMetrics.filter { (label, _) ->
