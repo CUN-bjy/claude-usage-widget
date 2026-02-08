@@ -287,6 +287,30 @@ function buildExtraRows(data) {
         const resetsAt = value.resets_at;
         const colorClass = config.color;
 
+        // For extra_usage (spending-based), show dollar amounts instead of countdown
+        let timerHTML;
+        if (key === 'extra_usage' && value.used_cents != null && value.limit_cents != null) {
+            const usedDollars = (value.used_cents / 100).toFixed(0);
+            const limitDollars = (value.limit_cents / 100).toFixed(0);
+            timerHTML = `
+                <div class="timer-container">
+                    <span class="timer-text extra-spending">$${usedDollars}/$${limitDollars}</span>
+                </div>
+            `;
+        } else {
+            const totalMinutes = key.includes('seven_day') ? 7 * 24 * 60 : 5 * 60;
+            timerHTML = `
+                <div class="timer-container">
+                    <div class="timer-text" data-resets="${resetsAt || ''}" data-total="${totalMinutes}">--:--</div>
+                    <svg class="mini-timer" width="24" height="24" viewBox="0 0 24 24">
+                        <circle class="timer-bg" cx="12" cy="12" r="10" />
+                        <circle class="timer-progress ${colorClass}" cx="12" cy="12" r="10"
+                            style="stroke-dasharray: 63; stroke-dashoffset: 63" />
+                    </svg>
+                </div>
+            `;
+        }
+
         const row = document.createElement('div');
         row.className = 'usage-section';
         row.innerHTML = `
@@ -295,14 +319,7 @@ function buildExtraRows(data) {
                 <div class="progress-fill ${colorClass}" style="width: ${Math.min(utilization, 100)}%"></div>
             </div>
             <span class="usage-percentage">${Math.round(utilization)}%</span>
-            <div class="timer-container">
-                <div class="timer-text" data-resets="${resetsAt || ''}" data-total="${key.includes('seven_day') ? 7 * 24 * 60 : 5 * 60}">--:--</div>
-                <svg class="mini-timer" width="24" height="24" viewBox="0 0 24 24">
-                    <circle class="timer-bg" cx="12" cy="12" r="10" />
-                    <circle class="timer-progress ${colorClass}" cx="12" cy="12" r="10"
-                        style="stroke-dasharray: 63; stroke-dashoffset: 63" />
-                </svg>
-            </div>
+            ${timerHTML}
         `;
 
         // Apply warning/danger classes

@@ -313,14 +313,19 @@ ipcMain.handle('fetch-usage-data', async () => {
   // Ensure cookie is set
   await setSessionCookie(sessionKey);
 
-  try {
-    const data = await fetchViaWindow(
-      `https://claude.ai/api/organizations/${organizationId}/usage`
-    );
-    return data;
-  } catch (error) {
+  const usageUrl = `https://claude.ai/api/organizations/${organizationId}/usage`;
+  const overageUrl = `https://claude.ai/api/organizations/${organizationId}/overage_spend_limit`;
+
+  // Fetch both endpoints in parallel. Usage is required; overage is optional.
+  const [usageResult, overageResult] = await Promise.allSettled([
+    fetchViaWindow(usageUrl),
+    fetchViaWindow(overageUrl)
+  ]);
+
+  // Usage endpoint is mandatory
+  if (usageResult.status === 'rejected') {
+    const error = usageResult.reason;
     debugLog('API request failed:', error.message);
-    // Detect Cloudflare blocks or auth failures and trigger re-login
     const isBlocked = error.message.startsWith('CloudflareBlocked')
       || error.message.startsWith('CloudflareChallenge')
       || error.message.startsWith('UnexpectedHTML');
@@ -334,6 +339,29 @@ ipcMain.handle('fetch-usage-data', async () => {
     }
     throw error;
   }
+
+  const data = usageResult.value;
+
+  // Merge overage spending data into data.extra_usage
+  if (overageResult.status === 'fulfilled' && overageResult.value) {
+    const overage = overageResult.value;
+    const limit = overage.monthly_credit_limit ?? overage.spend_limit_amount_cents;
+    const used = overage.used_credits ?? overage.balance_cents;
+    const enabled = overage.is_enabled !== undefined ? overage.is_enabled : (limit != null);
+
+    if (enabled && typeof limit === 'number' && limit > 0 && typeof used === 'number') {
+      data.extra_usage = {
+        utilization: (used / limit) * 100,
+        resets_at: null,
+        used_cents: used,
+        limit_cents: limit,
+      };
+    }
+  } else {
+    debugLog('Overage fetch skipped or failed:', overageResult.reason?.message || 'no data');
+  }
+
+  return data;
 });
 
 // App lifecycle
