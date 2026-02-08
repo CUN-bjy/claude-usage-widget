@@ -315,11 +315,13 @@ ipcMain.handle('fetch-usage-data', async () => {
 
   const usageUrl = `https://claude.ai/api/organizations/${organizationId}/usage`;
   const overageUrl = `https://claude.ai/api/organizations/${organizationId}/overage_spend_limit`;
+  const prepaidUrl = `https://claude.ai/api/organizations/${organizationId}/prepaid/credits`;
 
-  // Fetch both endpoints in parallel. Usage is required; overage is optional.
-  const [usageResult, overageResult] = await Promise.allSettled([
+  // Fetch all endpoints in parallel. Usage is required; overage and prepaid are optional.
+  const [usageResult, overageResult, prepaidResult] = await Promise.allSettled([
     fetchViaWindow(usageUrl),
-    fetchViaWindow(overageUrl)
+    fetchViaWindow(overageUrl),
+    fetchViaWindow(prepaidUrl)
   ]);
 
   // Usage endpoint is mandatory
@@ -359,6 +361,17 @@ ipcMain.handle('fetch-usage-data', async () => {
     }
   } else {
     debugLog('Overage fetch skipped or failed:', overageResult.reason?.message || 'no data');
+  }
+
+  // Merge prepaid balance into data.extra_usage
+  if (prepaidResult.status === 'fulfilled' && prepaidResult.value) {
+    const prepaid = prepaidResult.value;
+    if (typeof prepaid.amount === 'number') {
+      if (!data.extra_usage) data.extra_usage = {};
+      data.extra_usage.balance_cents = prepaid.amount;
+    }
+  } else {
+    debugLog('Prepaid fetch skipped or failed:', prepaidResult.reason?.message || 'no data');
   }
 
   return data;

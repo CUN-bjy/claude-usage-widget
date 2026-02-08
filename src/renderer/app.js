@@ -281,23 +281,40 @@ function buildExtraRows(data) {
 
     for (const [key, config] of Object.entries(EXTRA_ROW_CONFIG)) {
         const value = data[key];
-        if (!value || value.utilization === undefined) continue;
+        // extra_usage is valid with utilization OR balance_cents (prepaid only)
+        const hasUtilization = value && value.utilization !== undefined;
+        const hasBalance = key === 'extra_usage' && value && value.balance_cents != null;
+        if (!hasUtilization && !hasBalance) continue;
 
         const utilization = value.utilization || 0;
         const resetsAt = value.resets_at;
         const colorClass = config.color;
 
-        // For extra_usage (spending-based), show dollar amounts instead of countdown
+        let percentageHTML;
         let timerHTML;
-        if (key === 'extra_usage' && value.used_cents != null && value.limit_cents != null) {
-            const usedDollars = (value.used_cents / 100).toFixed(0);
-            const limitDollars = (value.limit_cents / 100).toFixed(0);
-            timerHTML = `
-                <div class="timer-container">
-                    <span class="timer-text extra-spending">$${usedDollars}/$${limitDollars}</span>
-                </div>
-            `;
+
+        if (key === 'extra_usage') {
+            // Percentage area → spending amounts
+            if (value.used_cents != null && value.limit_cents != null) {
+                const usedDollars = (value.used_cents / 100).toFixed(0);
+                const limitDollars = (value.limit_cents / 100).toFixed(0);
+                percentageHTML = `<span class="usage-percentage extra-spending">$${usedDollars}/$${limitDollars}</span>`;
+            } else {
+                percentageHTML = `<span class="usage-percentage">${Math.round(utilization)}%</span>`;
+            }
+            // Timer area → prepaid balance
+            if (value.balance_cents != null) {
+                const balanceDollars = (value.balance_cents / 100).toFixed(0);
+                timerHTML = `
+                    <div class="timer-container">
+                        <span class="timer-text extra-balance">Bal $${balanceDollars}</span>
+                    </div>
+                `;
+            } else {
+                timerHTML = `<div class="timer-container"></div>`;
+            }
         } else {
+            percentageHTML = `<span class="usage-percentage">${Math.round(utilization)}%</span>`;
             const totalMinutes = key.includes('seven_day') ? 7 * 24 * 60 : 5 * 60;
             timerHTML = `
                 <div class="timer-container">
@@ -318,7 +335,7 @@ function buildExtraRows(data) {
             <div class="progress-bar">
                 <div class="progress-fill ${colorClass}" style="width: ${Math.min(utilization, 100)}%"></div>
             </div>
-            <span class="usage-percentage">${Math.round(utilization)}%</span>
+            ${percentageHTML}
             ${timerHTML}
         `;
 

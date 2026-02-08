@@ -608,10 +608,17 @@ body {
     font-family: inherit;
 }
 
-.timer-text.extra-spending {
+.timer-text.extra-spending,
+.usage-percentage.extra-spending {
     font-size: 10px;
     color: #10b981;
     opacity: 0.8;
+}
+
+.timer-text.extra-balance {
+    font-size: 10px;
+    color: #34d399;
+    font-weight: 600;
 }
 
 /* Settings Overlay */
