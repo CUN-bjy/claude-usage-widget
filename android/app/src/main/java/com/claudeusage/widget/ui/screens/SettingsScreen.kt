@@ -11,8 +11,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.claudeusage.widget.ui.theme.*
@@ -135,11 +137,29 @@ fun SettingsScreen(
                     SettingsLinkRow(title = "Privacy Policy") {
                         uriHandler.openUri(PRIVACY_POLICY_URL)
                     }
-                    SettingsDivider()
-                    SettingsLinkRow(title = "Buy Me a Coffee") {
-                        uriHandler.openUri(DONATE_URL)
-                    }
                 }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Buy Me a Coffee badge
+            Button(
+                onClick = { uriHandler.openUri(DONATE_URL) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFFFDD00)
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = "\u2615  Buy me a coffee",
+                    color = Color.Black,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
