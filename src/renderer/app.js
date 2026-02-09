@@ -7,6 +7,23 @@ let isExpanded = false;
 const UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const WIDGET_HEIGHT_COLLAPSED = 140;
 const WIDGET_ROW_HEIGHT = 30;
+const COACH_BANNER_HEIGHT = 26;
+
+// Productivity Coach state
+let coachEnabled = true;
+let prevSessionUtilization = null;
+let prevSessionResetsAt = null;
+let prevWeeklyUtilization = null;
+let prevWeeklyResetsAt = null;
+let lastSessionResetNotifTime = 0;
+let lastWeeklyResetNotifTime = 0;
+let resetBannerOverride = null;
+let resetBannerTimeout = null;
+let lastCoachMessage = null;
+
+// Usage history for forecast graph
+let usageHistory = [];
+const MAX_HISTORY_ENTRIES = 2016; // 7 days * 24h * 60min / 5min
 
 // Debug logging — only shows in DevTools (development mode).
 // Regular users won't see verbose logs in production.
@@ -54,12 +71,34 @@ const elements = {
     settingsOverlay: document.getElementById('settingsOverlay'),
     closeSettingsBtn: document.getElementById('closeSettingsBtn'),
     logoutBtn: document.getElementById('logoutBtn'),
-    coffeeBtn: document.getElementById('coffeeBtn')
+    coffeeBtn: document.getElementById('coffeeBtn'),
+
+    // Coach
+    coachBanner: document.getElementById('coachBanner'),
+    coachText: document.getElementById('coachText'),
+    coachToggle: document.getElementById('coachToggle'),
+
+    // Graph
+    chartBtn: document.getElementById('chartBtn'),
+    graphOverlay: document.getElementById('graphOverlay'),
+    closeGraphBtn: document.getElementById('closeGraphBtn'),
+    forecastGraph: document.getElementById('forecastGraph'),
+    graphStats: document.getElementById('graphStats'),
+    graphLegend: document.getElementById('graphLegend')
 };
 
 // Initialize
 async function init() {
     setupEventListeners();
+
+    // Load settings
+    const settings = await window.electronAPI.getSettings();
+    coachEnabled = settings.coachEnabled !== false;
+    elements.coachToggle.checked = coachEnabled;
+
+    // Load usage history
+    usageHistory = await window.electronAPI.getUsageHistory();
+
     credentials = await window.electronAPI.getCredentials();
 
     if (credentials.sessionKey && credentials.organizationId) {
@@ -145,6 +184,26 @@ function setupEventListeners() {
         window.electronAPI.openExternal('https://paypal.me/SlavomirDurej?country.x=GB&locale.x=en_GB');
     });
 
+    // Coach toggle
+    elements.coachToggle.addEventListener('change', async () => {
+        coachEnabled = elements.coachToggle.checked;
+        await window.electronAPI.saveSettings({ coachEnabled });
+        updateCoachBanner();
+    });
+
+    // Graph overlay
+    elements.chartBtn.addEventListener('click', () => {
+        renderForecastGraph();
+        elements.graphOverlay.style.display = 'flex';
+        // Resize window to accommodate graph overlay
+        window.electronAPI.resizeWindow(320);
+    });
+
+    elements.closeGraphBtn.addEventListener('click', () => {
+        elements.graphOverlay.style.display = 'none';
+        resizeWidget();
+    });
+
     // Listen for refresh requests from tray
     window.electronAPI.onRefreshUsage(async () => {
         await fetchUsageData();
@@ -218,7 +277,7 @@ async function handleAutoDetect() {
             startAutoUpdate();
         } else {
             elements.autoDetectError.textContent =
-                'Session invalid. Try again or use Manual →';
+                'Session invalid. Try again or use Manual \u2192';
         }
     } catch (error) {
         elements.autoDetectError.textContent = error.message || 'Login failed';
@@ -375,21 +434,32 @@ function refreshExtraTimers() {
 
 function resizeWidget() {
     const extraCount = elements.extraRows.children.length;
-    if (isExpanded && extraCount > 0) {
-        const expandedHeight = WIDGET_HEIGHT_COLLAPSED + 12 + (extraCount * WIDGET_ROW_HEIGHT);
-        window.electronAPI.resizeWindow(expandedHeight);
-    } else {
-        window.electronAPI.resizeWindow(WIDGET_HEIGHT_COLLAPSED);
+    let height = WIDGET_HEIGHT_COLLAPSED;
+
+    // Add banner height if visible
+    if (elements.coachBanner && elements.coachBanner.style.display !== 'none') {
+        height += COACH_BANNER_HEIGHT;
     }
+
+    if (isExpanded && extraCount > 0) {
+        height += 12 + (extraCount * WIDGET_ROW_HEIGHT);
+    }
+
+    window.electronAPI.resizeWindow(height);
 }
 
 function updateUI(data) {
+    // Detect resets BEFORE overwriting latestUsageData
+    detectResets(data);
+
     latestUsageData = data;
 
     showMainContent();
     buildExtraRows(data);
     refreshTimers();
     if (isExpanded) refreshExtraTimers();
+    recordUsageHistory(data);
+    updateCoachBanner();
     resizeWidget();
     startCountdown();
 }
@@ -471,6 +541,7 @@ function startCountdown() {
     countdownInterval = setInterval(() => {
         refreshTimers();
         if (isExpanded) refreshExtraTimers();
+        updateCoachBanner();
     }, 1000);
 }
 
@@ -549,6 +620,468 @@ function updateTimer(timerElement, textElement, resetsAt, totalMinutes) {
     }
 }
 
+// ===== Productivity Coach =====
+
+function formatShortTime(ms) {
+    if (ms <= 0) return 'now';
+    const totalMin = Math.floor(ms / 60000);
+    if (totalMin < 60) return totalMin + 'm';
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    if (h >= 24) {
+        const d = Math.floor(h / 24);
+        const rh = h % 24;
+        return d + 'd ' + rh + 'h';
+    }
+    return h + 'h ' + m + 'm';
+}
+
+function evaluateCoachNotification() {
+    if (!coachEnabled) return null;
+    if (!latestUsageData) return null;
+
+    // Temporary reset override takes priority
+    if (resetBannerOverride) return resetBannerOverride;
+
+    const sessionUtil = latestUsageData.five_hour?.utilization || 0;
+    const sessionResetsAt = latestUsageData.five_hour?.resets_at;
+    const weeklyUtil = latestUsageData.seven_day?.utilization || 0;
+    const weeklyResetsAt = latestUsageData.seven_day?.resets_at;
+
+    const now = Date.now();
+
+    function msUntilReset(isoDate) {
+        if (!isoDate) return Infinity;
+        return new Date(isoDate).getTime() - now;
+    }
+
+    const sessionMs = msUntilReset(sessionResetsAt);
+    const weeklyMs = msUntilReset(weeklyResetsAt);
+    const sessionMin = sessionMs / 60000;
+    const weeklyDays = weeklyMs / (24 * 60 * 60 * 1000);
+
+    // H: session maxed out
+    if (sessionUtil >= 100) {
+        return {
+            message: `Session maxed out \u2014 resets in ${formatShortTime(sessionMs)}. Switch tasks!`,
+            severity: 'danger'
+        };
+    }
+
+    // B: session > 80% and reset < 30min
+    if (sessionUtil > 80 && sessionMin < 30 && sessionMin > 0) {
+        return {
+            message: 'Reset imminent! Take a break, come back fully charged',
+            severity: 'warning'
+        };
+    }
+
+    // A: session < 30% and reset < 1h
+    if (sessionUtil < 30 && sessionUtil > 0 && sessionMin < 60 && sessionMin > 0) {
+        return {
+            message: `Session resets in ${formatShortTime(sessionMs)} \u2014 don\u2019t waste the remaining capacity!`,
+            severity: 'warning'
+        };
+    }
+
+    // D: weekly > 70% and reset > 2 days
+    if (weeklyUtil > 70 && weeklyDays > 2) {
+        return {
+            message: '70%+ weekly used \u2014 focus on high-impact tasks only',
+            severity: 'warning'
+        };
+    }
+
+    // E: weekly < 40% and reset < 1 day
+    if (weeklyUtil < 40 && weeklyUtil > 0 && weeklyDays < 1 && weeklyDays > 0) {
+        return {
+            message: 'Last sprint! Use your remaining weekly capacity before reset',
+            severity: 'warning'
+        };
+    }
+
+    // C: weekly < 50% and reset > 3 days
+    if (weeklyUtil < 50 && weeklyDays > 3) {
+        return {
+            message: 'Plenty of capacity \u2014 perfect time for deep work!',
+            severity: 'positive'
+        };
+    }
+
+    return null;
+}
+
+function updateCoachBanner() {
+    const notification = evaluateCoachNotification();
+
+    if (!notification) {
+        if (elements.coachBanner.style.display !== 'none') {
+            elements.coachBanner.style.display = 'none';
+            lastCoachMessage = null;
+            resizeWidget();
+        }
+        return;
+    }
+
+    // Skip DOM update if message hasn't changed
+    if (notification.message === lastCoachMessage) return;
+    lastCoachMessage = notification.message;
+
+    elements.coachText.textContent = notification.message;
+    elements.coachBanner.classList.remove('warning', 'danger', 'positive');
+    if (notification.severity !== 'neutral') {
+        elements.coachBanner.classList.add(notification.severity);
+    }
+
+    if (elements.coachBanner.style.display === 'none') {
+        elements.coachBanner.style.display = 'flex';
+        resizeWidget();
+    }
+}
+
+// ===== Reset Detection =====
+
+function detectResets(data) {
+    if (!coachEnabled) {
+        // Still track prev values even when disabled, for correct detection when re-enabled
+        prevSessionUtilization = data.five_hour?.utilization || 0;
+        prevSessionResetsAt = data.five_hour?.resets_at || null;
+        prevWeeklyUtilization = data.seven_day?.utilization || 0;
+        prevWeeklyResetsAt = data.seven_day?.resets_at || null;
+        return;
+    }
+
+    const now = Date.now();
+    const NOTIF_COOLDOWN = 60000;
+
+    const sessionUtil = data.five_hour?.utilization || 0;
+    const sessionResetsAt = data.five_hour?.resets_at || null;
+    const weeklyUtil = data.seven_day?.utilization || 0;
+    const weeklyResetsAt = data.seven_day?.resets_at || null;
+
+    // Session reset: utilization dropped to 0 or resets_at shifted forward
+    const sessionDidReset =
+        prevSessionUtilization !== null &&
+        prevSessionUtilization > 0 &&
+        sessionUtil === 0;
+    const sessionTimerShifted =
+        prevSessionResetsAt !== null &&
+        sessionResetsAt !== null &&
+        prevSessionResetsAt !== sessionResetsAt &&
+        new Date(sessionResetsAt) > new Date(prevSessionResetsAt);
+
+    if ((sessionDidReset || sessionTimerShifted) &&
+        (now - lastSessionResetNotifTime > NOTIF_COOLDOWN)) {
+        lastSessionResetNotifTime = now;
+        window.electronAPI.showNotification({
+            title: 'Claude Usage',
+            body: 'Fully charged! Start a new session now'
+        });
+        showResetBanner({
+            message: 'Fully charged! Start a new session now',
+            severity: 'positive'
+        });
+    }
+
+    // Weekly reset
+    const weeklyDidReset =
+        prevWeeklyUtilization !== null &&
+        prevWeeklyUtilization > 0 &&
+        weeklyUtil === 0;
+    const weeklyTimerShifted =
+        prevWeeklyResetsAt !== null &&
+        weeklyResetsAt !== null &&
+        prevWeeklyResetsAt !== weeklyResetsAt &&
+        new Date(weeklyResetsAt) > new Date(prevWeeklyResetsAt);
+
+    if ((weeklyDidReset || weeklyTimerShifted) &&
+        (now - lastWeeklyResetNotifTime > NOTIF_COOLDOWN)) {
+        lastWeeklyResetNotifTime = now;
+        window.electronAPI.showNotification({
+            title: 'Claude Usage',
+            body: 'Weekly reset! Let\u2019s make this week count'
+        });
+        showResetBanner({
+            message: 'Weekly reset! Let\u2019s make this week count',
+            severity: 'positive'
+        });
+    }
+
+    prevSessionUtilization = sessionUtil;
+    prevSessionResetsAt = sessionResetsAt;
+    prevWeeklyUtilization = weeklyUtil;
+    prevWeeklyResetsAt = weeklyResetsAt;
+}
+
+function showResetBanner(notification) {
+    if (resetBannerTimeout) clearTimeout(resetBannerTimeout);
+    resetBannerOverride = notification;
+    updateCoachBanner();
+
+    resetBannerTimeout = setTimeout(() => {
+        resetBannerOverride = null;
+        updateCoachBanner();
+    }, 30000);
+}
+
+// ===== Usage History for Forecast Graph =====
+
+function recordUsageHistory(data) {
+    const weeklyUtil = data.seven_day?.utilization;
+    if (weeklyUtil === undefined) return;
+
+    const entry = {
+        timestamp: Date.now(),
+        utilization: weeklyUtil
+    };
+
+    usageHistory.push(entry);
+
+    // Cap at max entries
+    if (usageHistory.length > MAX_HISTORY_ENTRIES) {
+        usageHistory = usageHistory.slice(-MAX_HISTORY_ENTRIES);
+    }
+
+    // Persist asynchronously
+    window.electronAPI.saveUsageHistory(usageHistory);
+}
+
+function clearHistoryOnWeeklyReset() {
+    usageHistory = [];
+    window.electronAPI.clearUsageHistory();
+}
+
+// ===== Forecast Graph =====
+
+function calculateBurningRatio() {
+    if (!latestUsageData) return null;
+
+    const weeklyResetsAt = latestUsageData.seven_day?.resets_at;
+    const weeklyUtil = latestUsageData.seven_day?.utilization || 0;
+    if (!weeklyResetsAt || weeklyUtil === 0) return null;
+
+    const resetTime = new Date(weeklyResetsAt).getTime();
+    const weekStart = resetTime - (7 * 24 * 60 * 60 * 1000);
+    const now = Date.now();
+    const elapsedHours = (now - weekStart) / (1000 * 60 * 60);
+
+    if (elapsedHours <= 0) return null;
+    return weeklyUtil / elapsedHours; // % per hour
+}
+
+function renderForecastGraph() {
+    const svg = elements.forecastGraph;
+    const NS = 'http://www.w3.org/2000/svg';
+
+    // Clear previous content
+    svg.innerHTML = '';
+
+    if (!latestUsageData || !latestUsageData.seven_day?.resets_at) {
+        const text = document.createElementNS(NS, 'text');
+        text.setAttribute('x', '220');
+        text.setAttribute('y', '100');
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('class', 'graph-axis-label');
+        text.setAttribute('font-size', '11');
+        text.textContent = 'No weekly usage data available';
+        svg.appendChild(text);
+        elements.graphStats.innerHTML = '';
+        elements.graphLegend.innerHTML = '';
+        return;
+    }
+
+    // Graph dimensions (within viewBox 440x200)
+    const margin = { top: 15, right: 15, bottom: 25, left: 35 };
+    const width = 440 - margin.left - margin.right;
+    const height = 200 - margin.top - margin.bottom;
+
+    const weeklyResetsAt = latestUsageData.seven_day.resets_at;
+    const resetTime = new Date(weeklyResetsAt).getTime();
+    const weekStart = resetTime - (7 * 24 * 60 * 60 * 1000);
+    const now = Date.now();
+
+    // Scale helpers
+    function xScale(timestamp) {
+        const ratio = (timestamp - weekStart) / (resetTime - weekStart);
+        return margin.left + ratio * width;
+    }
+    function yScale(util) {
+        return margin.top + height - (util / 100) * height;
+    }
+
+    // Grid lines (horizontal at 25%, 50%, 75%, 100%)
+    [25, 50, 75, 100].forEach(val => {
+        const line = document.createElementNS(NS, 'line');
+        line.setAttribute('x1', margin.left);
+        line.setAttribute('x2', margin.left + width);
+        line.setAttribute('y1', yScale(val));
+        line.setAttribute('y2', yScale(val));
+        line.setAttribute('class', 'graph-grid-line');
+        svg.appendChild(line);
+
+        const label = document.createElementNS(NS, 'text');
+        label.setAttribute('x', margin.left - 5);
+        label.setAttribute('y', yScale(val) + 3);
+        label.setAttribute('text-anchor', 'end');
+        label.setAttribute('class', 'graph-axis-label');
+        label.textContent = val + '%';
+        svg.appendChild(label);
+    });
+
+    // Danger zone (above 80%)
+    const dangerRect = document.createElementNS(NS, 'rect');
+    dangerRect.setAttribute('x', margin.left);
+    dangerRect.setAttribute('y', yScale(100));
+    dangerRect.setAttribute('width', width);
+    dangerRect.setAttribute('height', yScale(80) - yScale(100));
+    dangerRect.setAttribute('class', 'graph-danger-zone');
+    svg.appendChild(dangerRect);
+
+    const dangerLine = document.createElementNS(NS, 'line');
+    dangerLine.setAttribute('x1', margin.left);
+    dangerLine.setAttribute('x2', margin.left + width);
+    dangerLine.setAttribute('y1', yScale(80));
+    dangerLine.setAttribute('y2', yScale(80));
+    dangerLine.setAttribute('class', 'graph-danger-line');
+    svg.appendChild(dangerLine);
+
+    // Axes
+    const xAxis = document.createElementNS(NS, 'line');
+    xAxis.setAttribute('x1', margin.left);
+    xAxis.setAttribute('x2', margin.left + width);
+    xAxis.setAttribute('y1', margin.top + height);
+    xAxis.setAttribute('y2', margin.top + height);
+    xAxis.setAttribute('class', 'graph-axis');
+    svg.appendChild(xAxis);
+
+    const yAxis = document.createElementNS(NS, 'line');
+    yAxis.setAttribute('x1', margin.left);
+    yAxis.setAttribute('x2', margin.left);
+    yAxis.setAttribute('y1', margin.top);
+    yAxis.setAttribute('y2', margin.top + height);
+    yAxis.setAttribute('class', 'graph-axis');
+    svg.appendChild(yAxis);
+
+    // X-axis day labels
+    for (let d = 0; d <= 7; d++) {
+        const t = weekStart + d * 24 * 60 * 60 * 1000;
+        const label = document.createElementNS(NS, 'text');
+        label.setAttribute('x', xScale(t));
+        label.setAttribute('y', margin.top + height + 15);
+        label.setAttribute('text-anchor', 'middle');
+        label.setAttribute('class', 'graph-axis-label');
+        label.textContent = d === 0 ? 'Start' : d === 7 ? 'Reset' : 'D' + d;
+        svg.appendChild(label);
+    }
+
+    // History line — filter to current week only
+    const weekHistory = usageHistory.filter(
+        e => e.timestamp >= weekStart && e.timestamp <= resetTime
+    );
+
+    if (weekHistory.length > 1) {
+        const points = weekHistory.map(e =>
+            `${xScale(e.timestamp)},${yScale(e.utilization)}`
+        ).join(' ');
+
+        const polyline = document.createElementNS(NS, 'polyline');
+        polyline.setAttribute('points', points);
+        polyline.setAttribute('class', 'graph-history-line');
+        svg.appendChild(polyline);
+    }
+
+    // Current point
+    const currentUtil = latestUsageData.seven_day.utilization || 0;
+    const currentX = xScale(Math.min(now, resetTime));
+    const currentY = yScale(currentUtil);
+
+    const currentDot = document.createElementNS(NS, 'circle');
+    currentDot.setAttribute('cx', currentX);
+    currentDot.setAttribute('cy', currentY);
+    currentDot.setAttribute('r', '4');
+    currentDot.setAttribute('class', 'graph-current-dot');
+    svg.appendChild(currentDot);
+
+    const currentLabel = document.createElementNS(NS, 'text');
+    currentLabel.setAttribute('x', currentX);
+    currentLabel.setAttribute('y', currentY - 10);
+    currentLabel.setAttribute('text-anchor', 'middle');
+    currentLabel.setAttribute('class', 'graph-current-label');
+    currentLabel.textContent = Math.round(currentUtil) + '%';
+    svg.appendChild(currentLabel);
+
+    // Projection line
+    const burningRatio = calculateBurningRatio();
+    let depletionTime = null;
+
+    if (burningRatio && burningRatio > 0 && currentUtil < 100) {
+        const hoursTo100 = (100 - currentUtil) / burningRatio;
+        depletionTime = now + hoursTo100 * 60 * 60 * 1000;
+
+        const projEndTime = Math.min(depletionTime, resetTime);
+        const projEndUtil = Math.min(
+            currentUtil + burningRatio * ((projEndTime - now) / (1000 * 60 * 60)),
+            100
+        );
+
+        const projLine = document.createElementNS(NS, 'line');
+        projLine.setAttribute('x1', currentX);
+        projLine.setAttribute('y1', currentY);
+        projLine.setAttribute('x2', xScale(projEndTime));
+        projLine.setAttribute('y2', yScale(projEndUtil));
+        projLine.setAttribute('class', 'graph-projection-line');
+        svg.appendChild(projLine);
+
+        // Depletion marker if it's before reset
+        if (depletionTime < resetTime) {
+            const depX = xScale(depletionTime);
+            const depY = yScale(100);
+
+            const depDot = document.createElementNS(NS, 'circle');
+            depDot.setAttribute('cx', depX);
+            depDot.setAttribute('cy', depY);
+            depDot.setAttribute('r', '3');
+            depDot.setAttribute('class', 'graph-depletion-dot');
+            svg.appendChild(depDot);
+
+            const timeUntil = formatShortTime(depletionTime - now);
+            const depLabel = document.createElementNS(NS, 'text');
+            depLabel.setAttribute('x', depX);
+            depLabel.setAttribute('y', depY - 8);
+            depLabel.setAttribute('text-anchor', 'middle');
+            depLabel.setAttribute('class', 'graph-depletion-label');
+            depLabel.textContent = '100% in ' + timeUntil;
+            svg.appendChild(depLabel);
+        }
+    }
+
+    // Stats bar
+    const elapsedDays = ((now - weekStart) / (24 * 60 * 60 * 1000)).toFixed(1);
+    const ratioText = burningRatio ? (burningRatio.toFixed(1) + '%/h') : 'N/A';
+    const depletionText = depletionTime
+        ? (depletionTime < resetTime ? formatShortTime(depletionTime - now) : 'Safe')
+        : 'N/A';
+
+    elements.graphStats.innerHTML = `
+        <span class="graph-stat">Rate: <span class="graph-stat-value">${ratioText}</span></span>
+        <span class="graph-stat">Day: <span class="graph-stat-value">${elapsedDays}/7</span></span>
+        <span class="graph-stat">Depletion: <span class="graph-stat-value">${depletionText}</span></span>
+    `;
+
+    // Legend
+    elements.graphLegend.innerHTML = `
+        <span class="graph-legend-item">
+            <span class="graph-legend-line actual"></span>Actual
+        </span>
+        <span class="graph-legend-item">
+            <span class="graph-legend-line projected"></span>Projected
+        </span>
+        <span class="graph-legend-item">
+            <span class="graph-legend-line danger"></span>Danger zone
+        </span>
+    `;
+}
+
 // UI State Management
 function showLoginRequired() {
     elements.loadingContainer.style.display = 'none';
@@ -599,7 +1132,7 @@ style.textContent = `
         from { transform: rotate(0deg); }
         to { transform: rotate(360deg); }
     }
-    
+
     .refresh-btn.spinning svg {
         animation: spin-refresh 1s linear;
     }

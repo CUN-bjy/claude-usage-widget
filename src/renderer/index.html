@@ -21,6 +21,11 @@
                     <span>Claude Usage</span>
                 </div>
                 <div class="controls">
+                    <button class="control-btn chart-btn" id="chartBtn" title="Usage Forecast">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                        </svg>
+                    </button>
                     <button class="control-btn settings-btn" id="settingsBtn" title="Settings">⚙️</button>
                     <button class="control-btn refresh-btn" id="refreshBtn" title="Refresh">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -144,6 +149,12 @@
                     <div id="extraRows"></div>
                 </div>
 
+                <!-- Productivity Coach Banner -->
+                <div class="coach-banner" id="coachBanner" style="display: none;">
+                    <span class="coach-icon">&#9889;</span>
+                    <span class="coach-text" id="coachText"></span>
+                </div>
+
             </div>
 
             <!-- Settings Overlay -->
@@ -154,6 +165,14 @@
                         <strong>Disclaimer:</strong> Unofficial tool not affiliated with Anthropic. Use at your own
                         discretion.
                     </p>
+
+                    <div class="settings-toggle">
+                        <span class="settings-toggle-label">Productivity Coach</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="coachToggle" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
 
                     <button class="coffee-btn" id="coffeeBtn">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -171,6 +190,17 @@
                         <button class="logout-btn" id="logoutBtn">Log Out</button>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Graph Overlay -->
+        <div class="graph-overlay" id="graphOverlay" style="display: none;">
+            <div class="graph-content">
+                <button class="icon-close-graph-btn" id="closeGraphBtn" title="Close">&times;</button>
+                <h3 class="graph-title">Weekly Usage Forecast</h3>
+                <div class="graph-stats" id="graphStats"></div>
+                <svg id="forecastGraph" class="forecast-graph" viewBox="0 0 440 200"></svg>
+                <div class="graph-legend" id="graphLegend"></div>
             </div>
         </div>
     </div>
