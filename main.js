@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, session, shell, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, session, shell } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
 const { fetchViaWindow } = require('./src/fetch-via-window');
@@ -245,49 +245,6 @@ ipcMain.handle('set-window-position', (event, { x, y }) => {
 
 ipcMain.on('open-external', (event, url) => {
   shell.openExternal(url);
-});
-
-// OS Notifications for productivity coach
-ipcMain.on('show-notification', (event, { title, body }) => {
-  if (Notification.isSupported()) {
-    const notif = new Notification({ title, body });
-    notif.on('click', () => {
-      if (mainWindow) {
-        mainWindow.show();
-        mainWindow.focus();
-      }
-    });
-    notif.show();
-  }
-});
-
-// Settings (coachEnabled, etc.)
-ipcMain.handle('get-settings', () => {
-  return {
-    coachEnabled: store.get('coachEnabled', true)
-  };
-});
-
-ipcMain.handle('save-settings', (event, settings) => {
-  for (const [key, value] of Object.entries(settings)) {
-    store.set(key, value);
-  }
-  return true;
-});
-
-// Usage history for forecast graph
-ipcMain.handle('get-usage-history', () => {
-  return store.get('usageHistory', []);
-});
-
-ipcMain.handle('save-usage-history', (event, history) => {
-  store.set('usageHistory', history);
-  return true;
-});
-
-ipcMain.handle('clear-usage-history', () => {
-  store.delete('usageHistory');
-  return true;
 });
 
 // Open a visible BrowserWindow for the user to log in to Claude.ai.

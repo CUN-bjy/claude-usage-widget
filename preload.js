@@ -27,17 +27,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // API
   fetchUsageData: () => ipcRenderer.invoke('fetch-usage-data'),
-  openExternal: (url) => ipcRenderer.send('open-external', url),
-
-  // Notifications
-  showNotification: (opts) => ipcRenderer.send('show-notification', opts),
-
-  // Settings
-  getSettings: () => ipcRenderer.invoke('get-settings'),
-  saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
-
-  // Usage history
-  getUsageHistory: () => ipcRenderer.invoke('get-usage-history'),
-  saveUsageHistory: (history) => ipcRenderer.invoke('save-usage-history', history),
-  clearUsageHistory: () => ipcRenderer.invoke('clear-usage-history')
+  openExternal: (url) => ipcRenderer.send('open-external', url)
 });
