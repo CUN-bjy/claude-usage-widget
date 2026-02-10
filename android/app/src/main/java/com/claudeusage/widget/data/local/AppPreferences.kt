@@ -33,6 +33,10 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_SHOW_EXTRA_USAGE, true)
         set(value) = prefs.edit().putBoolean(KEY_SHOW_EXTRA_USAGE, value).apply()
 
+    var coachEnabled: Boolean
+        get() = prefs.getBoolean(KEY_COACH_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_COACH_ENABLED, value).apply()
+
     companion object {
         private const val PREFS_NAME = "claude_app_preferences"
         private const val KEY_NOTIFICATION_ENABLED = "notification_enabled"
@@ -41,5 +45,6 @@ class AppPreferences(context: Context) {
         private const val KEY_SHOW_COWORK = "show_cowork"
         private const val KEY_SHOW_OAUTH_APPS = "show_oauth_apps"
         private const val KEY_SHOW_EXTRA_USAGE = "show_extra_usage"
+        private const val KEY_COACH_ENABLED = "coach_enabled"
     }
 }

@@ -29,5 +29,9 @@ val StatusExtra = Color(0xFF10B981)
 val StatusExtraLight = Color(0xFF34D399)
 val StatusOpus = Color(0xFFF59E0B)
 
+// Coach
+val StatusPositive = Color(0xFF10B981)
+val StatusPositiveLight = Color(0xFF34D399)
+
 // Progress bar backgrounds
 val ProgressTrack = Color(0xFF2A2A40)

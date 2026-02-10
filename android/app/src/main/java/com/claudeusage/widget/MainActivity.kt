@@ -18,6 +18,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.claudeusage.widget.data.local.AppPreferences
 import com.claudeusage.widget.service.UsageNotificationService
 import com.claudeusage.widget.service.UsageUpdateScheduler
+import com.claudeusage.widget.ui.screens.ForecastScreen
 import com.claudeusage.widget.ui.screens.MetricToggle
 import com.claudeusage.widget.ui.screens.SettingsScreen
 import com.claudeusage.widget.ui.screens.UiState
@@ -25,7 +26,7 @@ import com.claudeusage.widget.ui.screens.UsageScreen
 import com.claudeusage.widget.ui.screens.UsageViewModel
 import com.claudeusage.widget.ui.theme.ClaudeUsageTheme
 
-private enum class Screen { Usage, Settings }
+private enum class Screen { Usage, Settings, Forecast }
 
 class MainActivity : ComponentActivity() {
 
@@ -34,6 +35,7 @@ class MainActivity : ComponentActivity() {
 
     private var currentScreen by mutableStateOf(Screen.Usage)
     private var notificationEnabled by mutableStateOf(false)
+    private var coachEnabled by mutableStateOf(true)
     private val metricVisibility = mutableStateMapOf<String, Boolean>()
 
     private val loginLauncher = registerForActivityResult(
@@ -65,6 +67,7 @@ class MainActivity : ComponentActivity() {
 
         appPreferences = AppPreferences(applicationContext)
         notificationEnabled = appPreferences.notificationEnabled
+        coachEnabled = appPreferences.coachEnabled
 
         // Load metric visibility from preferences
         metricVisibility["sonnet"] = appPreferences.showSonnet
@@ -90,6 +93,8 @@ class MainActivity : ComponentActivity() {
                 val uiState by viewModel.uiState.collectAsState()
                 val isRefreshing by viewModel.isRefreshing.collectAsState()
                 val lastUpdated by viewModel.lastUpdated.collectAsState()
+                val coachNotification by viewModel.coachNotification.collectAsState()
+                val usageHistory by viewModel.usageHistory.collectAsState()
 
                 when (currentScreen) {
                     Screen.Usage -> {
@@ -100,6 +105,7 @@ class MainActivity : ComponentActivity() {
                             visibleMetrics = metricVisibility
                                 .filter { it.value }
                                 .keys,
+                            coachNotification = if (coachEnabled) coachNotification else null,
                             onRefresh = viewModel::refresh,
                             onLogout = {
                                 viewModel.logout()
@@ -109,7 +115,8 @@ class MainActivity : ComponentActivity() {
                             onManualLogin = { sessionKey ->
                                 viewModel.onManualLogin(sessionKey)
                             },
-                            onSettingsClick = { currentScreen = Screen.Settings }
+                            onSettingsClick = { currentScreen = Screen.Settings },
+                            onForecastClick = { currentScreen = Screen.Forecast }
                         )
                     }
                     Screen.Settings -> {
@@ -127,10 +134,23 @@ class MainActivity : ComponentActivity() {
                             onNotificationToggle = { enabled ->
                                 handleNotificationToggle(enabled)
                             },
+                            coachEnabled = coachEnabled,
+                            onCoachToggle = { enabled ->
+                                coachEnabled = enabled
+                                appPreferences.coachEnabled = enabled
+                            },
                             metricToggles = availableToggles,
                             onMetricToggle = { key, enabled ->
                                 handleMetricToggle(key, enabled)
                             },
+                            onBack = { currentScreen = Screen.Usage }
+                        )
+                    }
+                    Screen.Forecast -> {
+                        val usageData = (uiState as? UiState.Success)?.data
+                        ForecastScreen(
+                            usageData = usageData,
+                            history = usageHistory,
                             onBack = { currentScreen = Screen.Usage }
                         )
                     }
