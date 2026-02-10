@@ -127,8 +127,9 @@ Play Console에 입력해야 할 정보들입니다:
 
 | 항목 | 값 |
 |------|-----|
-| **앱 이름** | Claude Usage Widget |
-| **간단한 설명** (80자 이내) | Claude.ai 사용량을 실시간으로 모니터링하는 위젯 |
+| **앱 이름** | ClaudeMeter |
+| **부제목** (30자 이내) | Don't Waste a Single Token |
+| **간단한 설명** (80자 이내) | Squeeze your productivity. Monitor your Claude.ai usage in real-time. |
 | **자세한 설명** (4000자 이내) | 아래 참고 |
 | **카테고리** | 도구 (Tools) |
 | **이메일** | 본인 이메일 주소 |
@@ -136,7 +137,7 @@ Play Console에 입력해야 할 정보들입니다:
 ### 자세한 설명 (예시)
 
 ```
-Claude Usage Widget은 Claude.ai의 사용량을 실시간으로 확인할 수 있는 안드로이드 앱입니다.
+ClaudeMeter는 Claude.ai의 사용량을 실시간으로 확인할 수 있는 안드로이드 앱입니다.
 
 주요 기능:
 • 실시간 사용량 모니터링 - 세션 및 주간 사용량을 한눈에 확인
@@ -178,7 +179,7 @@ Claude.ai 계정의 세션 키가 필요합니다.
 1. [Play Console](https://play.google.com/console) 접속
 2. **"앱 만들기"** 클릭
 3. 기본 정보 입력:
-   - 앱 이름: `Claude Usage Widget`
+   - 앱 이름: `ClaudeMeter`
    - 기본 언어: 한국어 또는 영어
    - 앱/게임: **앱**
    - 무료/유료: **무료**
@@ -281,7 +282,7 @@ Play Console → **앱 콘텐츠** 섹션에서 모두 작성:
 
 ### 거부될 수 있는 사유
 
-- **상표 침해**: "Claude" 이름 사용 → 앱 이름에 "Unofficial"을 추가하는 것을 권장
+- **상표 침해**: "Claude" 이름 사용 → 앱 설명에 비공식 도구임을 반드시 명시
 - **로그인 방식**: 세션 키 직접 입력 방식은 Google이 보안 문제로 지적할 수 있음
 - **테스트 불가**: Google 심사팀이 앱을 테스트할 수 없으면 거부될 수 있음
 
