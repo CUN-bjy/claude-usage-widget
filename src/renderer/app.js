@@ -128,10 +128,57 @@ function setupEventListeners() {
     // Settings calls
     elements.settingsBtn.addEventListener('click', () => {
         elements.settingsOverlay.style.display = 'flex';
+        elements.settingsOverlay.style.transform = 'translateX(0)';
     });
 
     elements.closeSettingsBtn.addEventListener('click', () => {
         elements.settingsOverlay.style.display = 'none';
+    });
+
+    // Swipe-back gesture for settings overlay
+    let swipeStartX = null;
+    let swipeCurrentX = null;
+    let isSwiping = false;
+
+    elements.settingsOverlay.addEventListener('pointerdown', (e) => {
+        swipeStartX = e.clientX;
+        swipeCurrentX = e.clientX;
+        isSwiping = true;
+        elements.settingsOverlay.style.transition = 'none';
+    });
+
+    elements.settingsOverlay.addEventListener('pointermove', (e) => {
+        if (!isSwiping) return;
+        swipeCurrentX = e.clientX;
+        const deltaX = swipeCurrentX - swipeStartX;
+        if (deltaX > 0) {
+            elements.settingsOverlay.style.transform = `translateX(${deltaX}px)`;
+        }
+    });
+
+    elements.settingsOverlay.addEventListener('pointerup', () => {
+        if (!isSwiping) return;
+        isSwiping = false;
+        const deltaX = swipeCurrentX - swipeStartX;
+        const threshold = window.innerWidth * 0.3;
+        elements.settingsOverlay.style.transition = 'transform 0.2s ease';
+        if (deltaX > threshold) {
+            elements.settingsOverlay.style.transform = `translateX(${window.innerWidth}px)`;
+            setTimeout(() => {
+                elements.settingsOverlay.style.display = 'none';
+                elements.settingsOverlay.style.transform = 'translateX(0)';
+                elements.settingsOverlay.style.transition = '';
+            }, 200);
+        } else {
+            elements.settingsOverlay.style.transform = 'translateX(0)';
+        }
+    });
+
+    elements.settingsOverlay.addEventListener('pointercancel', () => {
+        if (!isSwiping) return;
+        isSwiping = false;
+        elements.settingsOverlay.style.transition = 'transform 0.2s ease';
+        elements.settingsOverlay.style.transform = 'translateX(0)';
     });
 
     elements.logoutBtn.addEventListener('click', async () => {
