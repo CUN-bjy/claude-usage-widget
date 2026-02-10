@@ -2,10 +2,10 @@ name: Build Windows (Setup + Portable)
 
 on:
   push:
-    branches: [main]
+    branches: [main_app]
     tags: ['v*']
   pull_request:
-    branches: [main]
+    branches: [main_app]
   workflow_dispatch:
 
 jobs:
