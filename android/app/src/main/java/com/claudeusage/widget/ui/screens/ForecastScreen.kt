@@ -41,8 +41,9 @@ fun ForecastScreen(
     // Calculate week boundaries
     val now = Instant.now()
     val weekEndMs = weeklyReset?.toEpochMilli() ?: (now.toEpochMilli() + Duration.ofDays(7).toMillis())
-    val weekStartMs = weekEndMs - Duration.ofDays(7).toMillis()
-    val totalWeekMs = (weekEndMs - weekStartMs).toDouble()
+    val weekDurationMs = Duration.ofDays(7).toMillis()
+    val weekStartMs = weekEndMs - weekDurationMs
+    val totalWeekMs = weekDurationMs.toDouble()
 
     // Elapsed fraction
     val elapsedMs = (now.toEpochMilli() - weekStartMs).coerceAtLeast(0)
@@ -216,9 +217,8 @@ fun ForecastScreen(
                         )
 
                         // Projection line (dashed)
-                        val projEndFraction = 1f // end of week
                         val projEndUtil = projectedTotal.coerceAtMost(100.0)
-                        val projEndX = leftPad + graphWidth * projEndFraction
+                        val projEndX = leftPad + graphWidth
                         val projEndY = topPad + graphHeight * (1 - (projEndUtil / 100.0).toFloat().coerceIn(0f, 1f))
 
                         // If depletion before end of week, draw to depletion point, then flat at 100%
@@ -298,7 +298,7 @@ fun ForecastScreen(
                         color = if (projectedTotal >= 100.0 && depletionHoursFromNow < remainingHours) {
                             StatusCritical
                         } else {
-                            StatusPositive
+                            StatusExtra
                         }
                     )
                 }

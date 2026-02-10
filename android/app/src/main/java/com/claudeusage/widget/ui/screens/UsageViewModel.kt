@@ -246,15 +246,14 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun detectResets(data: UsageData) {
-        if (!appPreferences.coachEnabled) return
-
         // Session reset: previous utilization was significant, now dropped to near zero
         val currentSessionUtil = data.fiveHour?.utilization ?: 0.0
         val prevSession = prevSessionUtil
         if (prevSession != null && prevSession > 30.0 && currentSessionUtil < 5.0) {
             sendCoachPushNotification(
                 "Fully charged!",
-                "Session reset complete — start a new session now"
+                "Session reset complete — start a new session now",
+                COACH_SESSION_RESET_ID
             )
         }
 
@@ -266,7 +265,8 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
             if (currentWeeklyUtil < 5.0) {
                 sendCoachPushNotification(
                     "Weekly reset!",
-                    "Fresh weekly capacity — let's make this week count"
+                    "Fresh weekly capacity — let's make this week count",
+                    COACH_WEEKLY_RESET_ID
                 )
                 historyStore.clearHistory()
                 _usageHistory.value = emptyList()
@@ -293,7 +293,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
         manager.createNotificationChannel(channel)
     }
 
-    private fun sendCoachPushNotification(title: String, message: String) {
+    private fun sendCoachPushNotification(title: String, message: String, notificationId: Int) {
         val app = getApplication<Application>()
         val intent = Intent(app, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -311,7 +311,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
         val manager = app.getSystemService(NotificationManager::class.java)
-        manager.notify(COACH_NOTIFICATION_ID++, notification)
+        manager.notify(notificationId, notification)
     }
 
     private fun formatDuration(duration: Duration): String {
@@ -332,7 +332,8 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         const val UPDATE_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
-        const val COACH_CHANNEL_ID = "coach_channel"
-        var COACH_NOTIFICATION_ID = 2001
+        private const val COACH_CHANNEL_ID = "coach_channel"
+        private const val COACH_SESSION_RESET_ID = 2001
+        private const val COACH_WEEKLY_RESET_ID = 2002
     }
 }

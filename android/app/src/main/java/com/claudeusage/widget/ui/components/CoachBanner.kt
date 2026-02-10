@@ -41,8 +41,8 @@ fun CoachBanner(
                     "\uD83D\uDCA1"
                 )
                 CoachSeverity.POSITIVE -> Triple(
-                    StatusPositive.copy(alpha = 0.15f),
-                    StatusPositive,
+                    StatusExtra.copy(alpha = 0.15f),
+                    StatusExtra,
                     "\uD83D\uDE80"
                 )
             }
