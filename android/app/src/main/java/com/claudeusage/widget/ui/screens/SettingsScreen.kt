@@ -21,7 +21,7 @@ import com.claudeusage.widget.ui.theme.*
 
 private const val GITHUB_URL = "https://github.com/CUN-bjy/claude-usage-widget"
 private const val PRIVACY_POLICY_URL = "https://github.com/CUN-bjy/claude-usage-widget/blob/main_app/PRIVACY_POLICY.md"
-private const val DONATE_URL = "https://buymeacoffee.com/dion_jy"
+private const val DONATE_URL = "https://paypal.me/JunyeobBaek"
 private const val APP_VERSION = "1.0.0"
 
 data class MetricToggle(
@@ -127,8 +127,6 @@ fun SettingsScreen(
             ) {
                 Column {
                     SettingsInfoRow(title = "Version", value = APP_VERSION)
-                    SettingsDivider()
-                    SettingsInfoRow(title = "Developer", value = "dion")
                     SettingsDivider()
                     SettingsLinkRow(title = "GitHub") {
                         uriHandler.openUri(GITHUB_URL)
