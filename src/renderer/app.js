@@ -54,7 +54,8 @@ const elements = {
     settingsOverlay: document.getElementById('settingsOverlay'),
     closeSettingsBtn: document.getElementById('closeSettingsBtn'),
     logoutBtn: document.getElementById('logoutBtn'),
-    coffeeBtn: document.getElementById('coffeeBtn')
+    coffeeBtn: document.getElementById('coffeeBtn'),
+    privacyLink: document.getElementById('privacyLink')
 };
 
 // Initialize
@@ -142,7 +143,12 @@ function setupEventListeners() {
     });
 
     elements.coffeeBtn.addEventListener('click', () => {
-        window.electronAPI.openExternal('https://paypal.me/SlavomirDurej?country.x=GB&locale.x=en_GB');
+        window.electronAPI.openExternal('https://paypal.me/JunyeobBaek');
+    });
+
+    elements.privacyLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.electronAPI.openExternal('https://github.com/CUN-bjy/claude-usage-widget/blob/main_app/PRIVACY_POLICY.md');
     });
 
     // Listen for refresh requests from tray

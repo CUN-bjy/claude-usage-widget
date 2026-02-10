@@ -53,5 +53,3 @@ This policy may be updated occasionally. Changes will be posted to this reposito
 If you have questions about this policy, please open an issue on [GitHub](https://github.com/CUN-bjy/claude-usage-widget).
 
 ---
-
-Developer: **dion**
