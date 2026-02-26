@@ -698,6 +698,20 @@ body {
     padding: 0;
 }
 
+.settings-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, #1a1a2e 0%, #252535 100%);
+    display: flex;
+    flex-direction: column;
+    border-radius: 10px;
+    overflow: hidden;
+    z-index: 10;
+}
+
 .settings-header {
     display: flex;
     align-items: center;
@@ -1069,6 +1083,7 @@ body.theme-light .control-btn:hover {
 
 body.theme-light .settings-overlay {
     background: linear-gradient(135deg, #f0f0f8 0%, #e8e8f0 100%);
+    border-radius: 10px;
 }
 
 body.theme-light .settings-row-label {
