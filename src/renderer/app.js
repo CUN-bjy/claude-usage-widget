@@ -5,7 +5,7 @@ let countdownInterval = null;
 let latestUsageData = null;
 let isExpanded = false;
 const UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
-const WIDGET_HEIGHT_COLLAPSED = 140;
+const WIDGET_HEIGHT_COLLAPSED = 155;
 const WIDGET_ROW_HEIGHT = 30;
 
 // Debug logging — only shows in DevTools (development mode).
@@ -44,6 +44,9 @@ const elements = {
     weeklyProgress: document.getElementById('weeklyProgress'),
     weeklyTimer: document.getElementById('weeklyTimer'),
     weeklyTimeText: document.getElementById('weeklyTimeText'),
+    weeklyResetsAt: document.getElementById('weeklyResetsAt'),
+
+    sessionResetsAt: document.getElementById('sessionResetsAt'),
 
     expandToggle: document.getElementById('expandToggle'),
     expandArrow: document.getElementById('expandArrow'),
@@ -54,13 +57,25 @@ const elements = {
     settingsOverlay: document.getElementById('settingsOverlay'),
     closeSettingsBtn: document.getElementById('closeSettingsBtn'),
     logoutBtn: document.getElementById('logoutBtn'),
-    coffeeBtn: document.getElementById('coffeeBtn')
+    coffeeBtn: document.getElementById('coffeeBtn'),
+    autoStartToggle: document.getElementById('autoStartToggle'),
+    minimizeToTrayToggle: document.getElementById('minimizeToTrayToggle'),
+    alwaysOnTopToggle: document.getElementById('alwaysOnTopToggle'),
+    warnThreshold: document.getElementById('warnThreshold'),
+    dangerThreshold: document.getElementById('dangerThreshold'),
+    themeBtns: document.querySelectorAll('.theme-btn')
 };
 
 // Initialize
 async function init() {
     setupEventListeners();
     credentials = await window.electronAPI.getCredentials();
+
+    // Apply saved theme and load thresholds immediately
+    const settings = await window.electronAPI.getSettings();
+    applyTheme(settings.theme);
+    warnThreshold = settings.warnThreshold;
+    dangerThreshold = settings.dangerThreshold;
 
     if (credentials.sessionKey && credentials.organizationId) {
         showMainContent();
@@ -125,13 +140,17 @@ function setupEventListeners() {
         resizeWidget();
     });
 
-    // Settings calls
-    elements.settingsBtn.addEventListener('click', () => {
+    // Settings open/close
+    elements.settingsBtn.addEventListener('click', async () => {
+        await loadSettings();
         elements.settingsOverlay.style.display = 'flex';
+        window.electronAPI.resizeWindow(260);
     });
 
-    elements.closeSettingsBtn.addEventListener('click', () => {
+    elements.closeSettingsBtn.addEventListener('click', async () => {
+        await saveSettings();
         elements.settingsOverlay.style.display = 'none';
+        resizeWidget();
     });
 
     elements.logoutBtn.addEventListener('click', async () => {
@@ -143,6 +162,15 @@ function setupEventListeners() {
 
     elements.coffeeBtn.addEventListener('click', () => {
         window.electronAPI.openExternal('https://paypal.me/SlavomirDurej?country.x=GB&locale.x=en_GB');
+    });
+
+    // Theme buttons
+    elements.themeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            elements.themeBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            applyTheme(btn.dataset.theme);
+        });
     });
 
     // Listen for refresh requests from tray
@@ -305,38 +333,34 @@ function buildExtraRows(data) {
             // Timer area → prepaid balance
             if (value.balance_cents != null) {
                 const balanceDollars = (value.balance_cents / 100).toFixed(0);
-                timerHTML = `
-                    <div class="timer-container">
-                        <span class="timer-text extra-balance">Bal $${balanceDollars}</span>
-                    </div>
-                `;
+                timerHTML = `<span class="timer-text extra-balance">Bal $${balanceDollars}</span>`;
             } else {
-                timerHTML = `<div class="timer-container"></div>`;
+                timerHTML = `<span class="timer-text"></span>`;
             }
         } else {
             percentageHTML = `<span class="usage-percentage">${Math.round(utilization)}%</span>`;
             const totalMinutes = key.includes('seven_day') ? 7 * 24 * 60 : 5 * 60;
-            timerHTML = `
-                <div class="timer-container">
-                    <div class="timer-text" data-resets="${resetsAt || ''}" data-total="${totalMinutes}">--:--</div>
-                    <svg class="mini-timer" width="24" height="24" viewBox="0 0 24 24">
-                        <circle class="timer-bg" cx="12" cy="12" r="10" />
-                        <circle class="timer-progress ${colorClass}" cx="12" cy="12" r="10"
-                            style="stroke-dasharray: 63; stroke-dashoffset: 63" />
-                    </svg>
-                </div>
-            `;
+            timerHTML = `<div class="timer-text" data-resets="${resetsAt || ''}" data-total="${totalMinutes}">--:--</div>`;
         }
 
         const row = document.createElement('div');
         row.className = 'usage-section';
         row.innerHTML = `
             <span class="usage-label">${config.label}</span>
-            <div class="progress-bar">
-                <div class="progress-fill ${colorClass}" style="width: ${Math.min(utilization, 100)}%"></div>
+            <div class="usage-bar-group">
+                <div class="progress-bar">
+                    <div class="progress-fill ${colorClass}" style="width: ${Math.min(utilization, 100)}%"></div>
+                </div>
+                ${percentageHTML}
             </div>
-            ${percentageHTML}
-            ${timerHTML}
+            <div class="usage-timer-group">
+                <svg class="mini-timer" width="24" height="24" viewBox="0 0 24 24">
+                    <circle class="timer-bg" cx="12" cy="12" r="10" />
+                    <circle class="timer-progress ${colorClass}" cx="12" cy="12" r="10"
+                        style="stroke-dasharray: 63; stroke-dashoffset: 63" />
+                </svg>
+                ${timerHTML}
+            </div>
         `;
 
         // Apply warning/danger classes
@@ -437,6 +461,8 @@ function refreshTimers() {
         sessionResetsAt,
         5 * 60 // 5 hours in minutes
     );
+    elements.sessionResetsAt.textContent = formatResetsAt(sessionResetsAt, false);
+    elements.sessionResetsAt.style.opacity = sessionResetsAt ? '1' : '0.4';
 
     // Weekly data
     const weeklyUtilization = latestUsageData.seven_day?.utilization || 0;
@@ -469,6 +495,8 @@ function refreshTimers() {
         weeklyResetsAt,
         7 * 24 * 60 // 7 days in minutes
     );
+    elements.weeklyResetsAt.textContent = formatResetsAt(weeklyResetsAt, true);
+    elements.weeklyResetsAt.style.opacity = weeklyResetsAt ? '1' : '0.4';
 }
 
 function startCountdown() {
@@ -486,27 +514,47 @@ function updateProgressBar(progressElement, percentageElement, value, isWeekly =
     progressElement.style.width = `${percentage}%`;
     percentageElement.textContent = `${Math.round(percentage)}%`;
 
-    // Update color based on usage level
     progressElement.classList.remove('warning', 'danger');
-    if (percentage >= 90) {
+    if (percentage >= dangerThreshold) {
         progressElement.classList.add('danger');
-    } else if (percentage >= 75) {
+    } else if (percentage >= warnThreshold) {
         progressElement.classList.add('warning');
+    }
+}
+
+// Format reset date for the "Resets At" column
+// Session: shows time like "10:00 PM"
+// Weekly: shows date like "Feb 28"
+function formatResetsAt(resetsAt, isWeekly) {
+    if (!resetsAt) return '—';
+    const date = new Date(resetsAt);
+    if (isWeekly) {
+        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const day = date.getDate();
+        return `${months[date.getMonth()]} ${day}`;
+    } else {
+        let hours = date.getHours();
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12 || 12;
+        return `${hours}:${minutes} ${ampm}`;
     }
 }
 
 // Update circular timer
 function updateTimer(timerElement, textElement, resetsAt, totalMinutes) {
     if (!resetsAt) {
-        textElement.textContent = '--:--';
-        textElement.style.opacity = '0.5';
+        textElement.textContent = 'Not started';
+        textElement.style.opacity = '0.4';
+        textElement.style.fontSize = '10px';
         textElement.title = 'Starts when a message is sent';
         timerElement.style.strokeDashoffset = 63;
         return;
     }
 
-    // Clear the greyed out styling and tooltip when timer is active
+    // Clear the greyed out styling when timer is active
     textElement.style.opacity = '1';
+    textElement.style.fontSize = '';
     textElement.title = '';
 
     const resetDate = new Date(resetsAt);
@@ -610,6 +658,55 @@ style.textContent = `
     }
 `;
 document.head.appendChild(style);
+
+// Settings management
+let warnThreshold = 75;
+let dangerThreshold = 90;
+
+async function loadSettings() {
+    const settings = await window.electronAPI.getSettings();
+
+    elements.autoStartToggle.checked = settings.autoStart;
+    elements.minimizeToTrayToggle.checked = settings.minimizeToTray;
+    elements.alwaysOnTopToggle.checked = settings.alwaysOnTop;
+    elements.warnThreshold.value = settings.warnThreshold;
+    elements.dangerThreshold.value = settings.dangerThreshold;
+
+    warnThreshold = settings.warnThreshold;
+    dangerThreshold = settings.dangerThreshold;
+
+    elements.themeBtns.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.theme === settings.theme);
+    });
+
+    applyTheme(settings.theme);
+}
+
+async function saveSettings() {
+    const activeThemeBtn = document.querySelector('.theme-btn.active');
+    const warn = parseInt(elements.warnThreshold.value) || 75;
+    const danger = parseInt(elements.dangerThreshold.value) || 90;
+
+    warnThreshold = warn;
+    dangerThreshold = danger;
+
+    const settings = {
+        autoStart: elements.autoStartToggle.checked,
+        minimizeToTray: elements.minimizeToTrayToggle.checked,
+        alwaysOnTop: elements.alwaysOnTopToggle.checked,
+        theme: activeThemeBtn ? activeThemeBtn.dataset.theme : 'dark',
+        warnThreshold: warn,
+        dangerThreshold: danger
+    };
+    await window.electronAPI.saveSettings(settings);
+    applyTheme(settings.theme);
+}
+
+function applyTheme(theme) {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const useDark = theme === 'dark' || (theme === 'system' && prefersDark);
+    document.body.classList.toggle('theme-light', !useDark);
+}
 
 // Start the application
 init();

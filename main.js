@@ -19,8 +19,8 @@ const CHROME_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit
 let mainWindow = null;
 let tray = null;
 
-const WIDGET_WIDTH = 480;
-const WIDGET_HEIGHT = 140;
+const WIDGET_WIDTH = 530;
+const WIDGET_HEIGHT = 155;
 
 // Set session-level User-Agent to avoid Electron detection
 app.on('ready', () => {
@@ -67,9 +67,6 @@ function createMainWindow() {
   mainWindow = new BrowserWindow(windowOptions);
   mainWindow.loadFile('src/renderer/index.html');
 
-  mainWindow.setAlwaysOnTop(true, 'floating');
-  mainWindow.setVisibleOnAllWorkspaces(true);
-
   mainWindow.on('move', () => {
     const position = mainWindow.getBounds();
     store.set('windowPosition', { x: position.x, y: position.y });
@@ -86,7 +83,7 @@ function createMainWindow() {
 
 function createTray() {
   try {
-    tray = new Tray(path.join(__dirname, 'assets/tray-icon.png'));
+    tray = new Tray(path.join(__dirname, 'assets/logo.png'));
 
     const contextMenu = Menu.buildFromTemplate([
       {
@@ -247,6 +244,39 @@ ipcMain.on('open-external', (event, url) => {
   shell.openExternal(url);
 });
 
+// Settings handlers
+ipcMain.handle('get-settings', () => {
+  return {
+    autoStart: store.get('settings.autoStart', false),
+    minimizeToTray: store.get('settings.minimizeToTray', false),
+    alwaysOnTop: store.get('settings.alwaysOnTop', true),
+    theme: store.get('settings.theme', 'dark'),
+    warnThreshold: store.get('settings.warnThreshold', 75),
+    dangerThreshold: store.get('settings.dangerThreshold', 90)
+  };
+});
+
+ipcMain.handle('save-settings', (event, settings) => {
+  store.set('settings.autoStart', settings.autoStart);
+  store.set('settings.minimizeToTray', settings.minimizeToTray);
+  store.set('settings.alwaysOnTop', settings.alwaysOnTop);
+  store.set('settings.theme', settings.theme);
+  store.set('settings.warnThreshold', settings.warnThreshold);
+  store.set('settings.dangerThreshold', settings.dangerThreshold);
+
+  app.setLoginItemSettings({
+    openAtLogin: settings.autoStart,
+    path: app.getPath('exe')
+  });
+
+  if (mainWindow) {
+    mainWindow.setSkipTaskbar(settings.minimizeToTray);
+    mainWindow.setAlwaysOnTop(settings.alwaysOnTop, 'floating');
+  }
+
+  return true;
+});
+
 // Open a visible BrowserWindow for the user to log in to Claude.ai.
 //
 // Why we don't embed login directly in the app:
@@ -387,6 +417,14 @@ app.whenReady().then(async () => {
 
   createMainWindow();
   createTray();
+
+  // Apply persisted settings
+  const minimizeToTray = store.get('settings.minimizeToTray', false);
+  const alwaysOnTop = store.get('settings.alwaysOnTop', true);
+  if (mainWindow) {
+    if (minimizeToTray) mainWindow.setSkipTaskbar(true);
+    mainWindow.setAlwaysOnTop(alwaysOnTop, 'floating');
+  }
 });
 
 app.on('window-all-closed', () => {
