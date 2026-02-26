@@ -2,7 +2,41 @@
 
 A beautiful, standalone Windows desktop widget that displays your Claude.ai usage statistics in real-time.
 
-![Claude Usage Widget](assets/claude-usage-screenshot.jpg)
+> **Note:** This is a fork of [SlavomirDurej/claude-usage-widget](https://github.com/SlavomirDurej/claude-usage-widget) with significant UX improvements and a full settings panel. Changes were developed with AI assistance (Claude).
+
+---
+
+## What's New in This Fork
+
+![Claude Usage Widget - Main](assets/screenshot-main.png)
+
+### Settings Panel
+A full settings overlay with persistent preferences via `electron-store`.
+
+![Claude Usage Widget - Settings](assets/screenshot-settings.png)
+
+- ⚙️ **Launch at startup** — Auto-start with Windows
+- 🖥️ **Always on top** — Now user-controlled (was hardcoded on)
+- 📌 **Hide from taskbar** — Tray-only mode
+- 🎨 **Theme selector** — Dark / Light / System
+- ⚠️ **Warning thresholds** — Configurable amber and red levels for usage bars
+
+### Improved Main Widget Layout
+- **5-column grid** with labeled headers: Session Used / Elapsed / Resets In / Resets At
+- **Elapsed** column shows a circular timer of how far through the current window you are
+- **Resets In** shows the countdown separately so it's not confused with elapsed time
+- **Resets At** shows the actual local clock time (session) or date (weekly reset)
+- **Fresh-user state** shows "Not started" instead of ambiguous dashes when no session is active
+
+### Quality of Life
+- 🔵 **Rounded corners** matching Windows 11 system window style
+- 🖼️ **Tray icon** fixed to use the app logo instead of the default Electron robot icon
+
+![Claude Usage Widget - Tray](assets/screenshot-tray.png)
+
+---
+
+## Original README
 
 ## Features
 
@@ -179,10 +213,10 @@ DEBUG_LOG=1 npm start
 
 - [ ] macOS support
 - [ ] Linux support
-- [ ] Custom themes
-- [ ] Notification alerts at usage thresholds
+- [x] Custom themes
+- [x] Notification alerts at usage thresholds
 - [x] Remember window position
-- [ ] Settings panel
+- [x] Settings panel
 - [ ] Usage history graphs
 - [ ] Multiple account support
 - [ ] Keyboard shortcuts
